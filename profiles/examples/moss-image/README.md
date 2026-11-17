@@ -11,8 +11,9 @@ together (the bf16 text encoder alone is 19.3 GB). A plain wake downloads **24.9
   [`workflows/`](workflows/) only when its license allows redistribution (Apache-2.0 or the MIT official
   templates); everything else is *URL-only* and fetched from the author at setup time. `upstream_sha256`
   pins the reviewed version (vendored files are checked by `tests/test_profiles.py`).
-- **Models are never vendored.** Every model is downloaded from its original Hugging Face repo; SHA-256 values
-  are the LFS object ids at review time.
+- **Models are never vendored.** Every model is downloaded from its original Hugging Face repo, or from a
+  byte-identical public mirror when the original was removed (see [Models](#models)); SHA-256 values are the LFS
+  object ids at review time.
 - The kit only adds ComfyUI's App-mode metadata (`extra.linearData`, `extra.linearMode`), swaps file names
   declared under `overrides`, and applies the profile's `model_aliases` (official templates load SFT int8 /
   Qwen w4a8 / small VAE → remapped to the shared SFT bf16 / Qwen int8 / Flux2 VAE at install time; the JSON files
@@ -26,7 +27,7 @@ Source of truth: the reviewed workflow manifest (2026-10-23), mirrored in [`prof
 |---|---|---|---|---|---|
 | `matlowai-deband-int8` — DeBand int8 merged checkpoints (25 / Fast 10 steps) | [MATLOWAI/MOSS-Image-SFT-DeBand-int8](https://huggingface.co/MATLOWAI/MOSS-Image-SFT-DeBand-int8) | Apache-2.0 | vendored `workflows/matlowai_deband_int8.json` | TIER1 own merged int8 checkpoints (3 × 5.4 GB) | optional |
 | `akhaliq-4step` — Fast · 4-step turbo LoRA (akhaliq) | [akhaliq/MOSS-Image-SFT-4-steps](https://huggingface.co/akhaliq/MOSS-Image-SFT-4-steps) | Apache-2.0 (redistributable) | vendored `workflows/akhaliq_moss-image-4step-turbo.json` | TIER1 speed | ✅ |
-| `rapid-moss-4step` — Fast · rapid-moss 4-step adapter (darask0) | [darask0/MOSS-Image_4-step_adapter_lora](https://huggingface.co/darask0/MOSS-Image_4-step_adapter_lora) | Apache-2.0 | vendored `workflows/rapid-moss-4step-native.json` | TIER1 speed (best quality at 4 steps, ~1MP only) | ✅ |
+| `rapid-moss-4step` — Fast · rapid-moss 4-step adapter (darask0) | [Epyan/MOSS-Image_4-step_adapter_lora](https://huggingface.co/Epyan/MOSS-Image_4-step_adapter_lora) (mirror of darask0) | Apache-2.0 | vendored `workflows/rapid-moss-4step-native.json` | TIER1 speed (best quality at 4 steps, ~1MP only) | ✅ |
 | `official-t2i` — Quality · official Text to Image (Comfy-Org) | [https://docs.comfy.org/tutorials/image/moss-image/moss-image](https://docs.comfy.org/tutorials/image/moss-image/moss-image) | MIT templates; model Apache-2.0 | vendored `workflows/official_moss_t2i.json` | TIER1 quality reference | ✅ |
 | `official-layout` — Layout · official Layout-Guided (Comfy-Org) | [https://docs.comfy.org/tutorials/image/moss-image/moss-image](https://docs.comfy.org/tutorials/image/moss-image/moss-image) | MIT/Apache-2.0 | vendored `workflows/official_moss_t2i_bboxes.json` | TIER1 layout | ✅ |
 | `matlowai-presets` — Default · DeBand banding-fix LoRAs on SFT bf16 (+ DMD/DMAD fast modes) | [MATLOWAI/MOSS-Image-SFT-DeBand](https://huggingface.co/MATLOWAI/MOSS-Image-SFT-DeBand) | Apache-2.0 | vendored `workflows/matlowai_banding_fix_presets.json` | TIER1 quality+speed balance | ✅ default |
@@ -62,14 +63,14 @@ background. `prefetch: true` on a workflow does the same on every wake.
 | `base-bf16` | `diffusion_models/moss_image_base_bf16.safetensors` | [Comfy-Org/MOSS-Image](https://huggingface.co/Comfy-Org/MOSS-Image) | apache-2.0 | 10.16 | on demand |
 | `akhaliq-4step-v2` | `loras/moss_image_sft_4step_v2.0.safetensors` | [akhaliq/MOSS-Image-SFT-4-steps](https://huggingface.co/akhaliq/MOSS-Image-SFT-4-steps) | apache-2.0 | 1.19 | on demand |
 | `kijai-4step-v2` | `loras/moss_image_sft_4_steps_lora_v2_600_avg_rank_72_bf16.safetensors` | [Kijai/MOSS-image_experimental](https://huggingface.co/Kijai/MOSS-image_experimental) | unspecified (link-only, never mirrored) | 0.33 | on demand |
-| `rapid-4step-lora` | `rapid_moss/rapid-moss-4step/lora.safetensors` | [darask0/MOSS-Image_4-step_adapter_lora](https://huggingface.co/darask0/MOSS-Image_4-step_adapter_lora) | apache-2.0 | 1.19 | on demand |
-| `rapid-4step-time` | `rapid_moss/rapid-moss-4step/time_embedding.safetensors` | [darask0/MOSS-Image_4-step_adapter_lora](https://huggingface.co/darask0/MOSS-Image_4-step_adapter_lora) | apache-2.0 | 0.04 | on demand |
-| `rapid-4step-dataspace` | `rapid_moss/rapid-moss-4step/dataspace.safetensors` | [darask0/MOSS-Image_4-step_adapter_lora](https://huggingface.co/darask0/MOSS-Image_4-step_adapter_lora) | apache-2.0 | 0.01 | on demand |
+| `rapid-4step-lora` | `rapid_moss/rapid-moss-4step/lora.safetensors` | [Epyan/MOSS-Image_4-step_adapter_lora](https://huggingface.co/Epyan/MOSS-Image_4-step_adapter_lora) (mirror of darask0) | apache-2.0 | 1.19 | on demand |
+| `rapid-4step-time` | `rapid_moss/rapid-moss-4step/time_embedding.safetensors` | [Epyan/MOSS-Image_4-step_adapter_lora](https://huggingface.co/Epyan/MOSS-Image_4-step_adapter_lora) (mirror of darask0) | apache-2.0 | 0.04 | on demand |
+| `rapid-4step-dataspace` | `rapid_moss/rapid-moss-4step/dataspace.safetensors` | [Epyan/MOSS-Image_4-step_adapter_lora](https://huggingface.co/Epyan/MOSS-Image_4-step_adapter_lora) (mirror of darask0) | apache-2.0 | 0.01 | on demand |
 | `lodestones-8step-lora` | `rapid_moss/lodestones-8step-latest/lora.safetensors` | [lodestones/MOSS-Image-SFT-8-steps-dmd](https://huggingface.co/lodestones/MOSS-Image-SFT-8-steps-dmd) | apache-2.0 | 1.19 | on demand |
 | `lodestones-8step-time` | `rapid_moss/lodestones-8step-latest/time_embedding.safetensors` | [lodestones/MOSS-Image-SFT-8-steps-dmd](https://huggingface.co/lodestones/MOSS-Image-SFT-8-steps-dmd) | apache-2.0 | 0.04 | on demand |
 | `lodestones-8step-dataspace` | `rapid_moss/lodestones-8step-latest/dataspace.safetensors` | [lodestones/MOSS-Image-SFT-8-steps-dmd](https://huggingface.co/lodestones/MOSS-Image-SFT-8-steps-dmd) | apache-2.0 | ? | on demand |
 | `lodestones-8step-as-lora` | `loras/lodestones_moss_sft_8step_dmd_lora_latest.safetensors` | [lodestones/MOSS-Image-SFT-8-steps-dmd](https://huggingface.co/lodestones/MOSS-Image-SFT-8-steps-dmd) | apache-2.0 | 1.19 | wake (core) |
-| `darask0-4step-as-lora` | `loras/darask0_moss_sft_4step_dmad_lora.safetensors` | [darask0/MOSS-Image_4-step_adapter_lora](https://huggingface.co/darask0/MOSS-Image_4-step_adapter_lora) | apache-2.0 | 1.19 | wake (core) |
+| `darask0-4step-as-lora` | `loras/darask0_moss_sft_4step_dmad_lora.safetensors` | [Epyan/MOSS-Image_4-step_adapter_lora](https://huggingface.co/Epyan/MOSS-Image_4-step_adapter_lora) (mirror of darask0) | apache-2.0 | 1.19 | wake (core) |
 | `deband-l37-41` | `loras/moss_image_sft_banding_fix_L37-41_bf16.safetensors` | [MATLOWAI/MOSS-Image-SFT-DeBand](https://huggingface.co/MATLOWAI/MOSS-Image-SFT-DeBand) | apache-2.0 | 1.13 | wake (core) |
 | `deband-l32-36` | `loras/moss_image_sft_banding_fix_L32-36_extra_bf16.safetensors` | [MATLOWAI/MOSS-Image-SFT-DeBand](https://huggingface.co/MATLOWAI/MOSS-Image-SFT-DeBand) | apache-2.0 | 1.13 | wake (core) |
 | `deband-l37-41-splitqkv` | `loras/moss_image_sft_banding_fix_L37-41_bf16_splitqkv.safetensors` | [MATLOWAI/MOSS-Image-SFT-DeBand](https://huggingface.co/MATLOWAI/MOSS-Image-SFT-DeBand) | apache-2.0 | 1.13 | on demand |
@@ -80,6 +81,12 @@ background. `prefetch: true` on a workflow does the same on every wake.
 downloaded only when a workflow that needs it is fetched (or prefetched). Background downloads pause while a prompt
 is running. Model aliases: `moss_image_sft_int8_convrot` → `sft-bf16`, `qwen3.5_9b_w4a8_gptq` / `qwen3.5_9b_bf16` →
 `te-int8`, `flux2-vae_small` → `vae`, `moss_image_base_int8_convrot` → `base-bf16`.
+
+The rapid-moss adapter's original repo, `darask0/MOSS-Image_4-step_adapter_lora`, was removed. Its weights
+(identical SHA-256), ComfyUI node and model card are mirrored at
+[Epyan/MOSS-Image_4-step_adapter_lora](https://huggingface.co/Epyan/MOSS-Image_4-step_adapter_lora), which the
+profile now downloads from; the `rapid-moss` custom node is pinned to mirror revision `df847329`. The adapter is
+darask0's work, and credit stays with them.
 
 ## ComfyUI settings in this profile
 

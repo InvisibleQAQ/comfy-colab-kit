@@ -91,19 +91,19 @@ models:
   size_gb: 0.33
 - id: rapid-4step-lora
   dest: rapid_moss/rapid-moss-4step/lora.safetensors
-  url: hf://darask0/MOSS-Image_4-step_adapter_lora/lora.safetensors
+  url: hf://Epyan/MOSS-Image_4-step_adapter_lora/lora.safetensors
   license: apache-2.0
   sha256: 4a4c8e2d6244a0fcdc2822b87b3435226ae57c289aef99fc2ac54edeab9e09bb
   size_gb: 1.19
 - id: rapid-4step-time
   dest: rapid_moss/rapid-moss-4step/time_embedding.safetensors
-  url: hf://darask0/MOSS-Image_4-step_adapter_lora/time_embedding.safetensors
+  url: hf://Epyan/MOSS-Image_4-step_adapter_lora/time_embedding.safetensors
   license: apache-2.0
   sha256: 2ebabc91e2a9e68c00e948dd80b05235a826e808817b5b2600b441457570d244
   size_gb: 0.04
 - id: rapid-4step-dataspace
   dest: rapid_moss/rapid-moss-4step/dataspace.safetensors
-  url: hf://darask0/MOSS-Image_4-step_adapter_lora/dataspace.safetensors
+  url: hf://Epyan/MOSS-Image_4-step_adapter_lora/dataspace.safetensors
   license: apache-2.0
   sha256: d19f0e695bb26886cfce57441fd412f358e159d6eec8555ec1a71daaf30a7968
   size_gb: 0.01
@@ -132,7 +132,7 @@ models:
   size_gb: 1.19
 - id: darask0-4step-as-lora
   dest: loras/darask0_moss_sft_4step_dmad_lora.safetensors
-  url: hf://darask0/MOSS-Image_4-step_adapter_lora/lora.safetensors
+  url: hf://Epyan/MOSS-Image_4-step_adapter_lora/lora.safetensors
   license: apache-2.0
   sha256: 4a4c8e2d6244a0fcdc2822b87b3435226ae57c289aef99fc2ac54edeab9e09bb
   size_gb: 1.19
@@ -168,7 +168,8 @@ models:
   size_gb: 0.3
 custom_nodes:
 - id: rapid-moss
-  url: https://huggingface.co/darask0/MOSS-Image_4-step_adapter_lora
+  url: https://huggingface.co/Epyan/MOSS-Image_4-step_adapter_lora
+  ref: df847329e81c1b43fe392e1b5a40af0bd430680e
   subdir: comfyui/rapid-moss
   license: apache-2.0
 - id: moss-image-edit
@@ -231,7 +232,8 @@ workflows:
     - 9
 - id: rapid-moss-4step
   title: Fast · rapid-moss 4-step adapter (darask0)
-  source: https://huggingface.co/darask0/MOSS-Image_4-step_adapter_lora
+  source: https://huggingface.co/Epyan/MOSS-Image_4-step_adapter_lora
+  note: 'upstream darask0/MOSS-Image_4-step_adapter_lora was removed; weights (same sha256) and node are mirrored at Epyan/MOSS-Image_4-step_adapter_lora; upstream_url keeps the original download location'
   license: Apache-2.0
   file: workflows/rapid-moss-4step-native.json
   upstream_url: https://huggingface.co/darask0/MOSS-Image_4-step_adapter_lora/resolve/main/comfyui/rapid-moss/example_workflows/rapid-moss-4step-native.json
