@@ -128,6 +128,7 @@ class Settings:
         "profiles/examples/sd-latest",
         "profiles/examples/qwen-image",
         "profiles/examples/minimax-h3-image",
+        "profiles/examples/minimax-h3-video",
     )
     default_profile: str = "moss-image"
     default_view: str = "app"

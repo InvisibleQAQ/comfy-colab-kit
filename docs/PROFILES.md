@@ -16,6 +16,7 @@ JSON Schema validation specification: [`packages/schemas/profile.schema.json`](.
 | [`sd-latest`](../profiles/examples/sd-latest/) | `sd35-large` | ~15 GB core / ~22 GB | SD 3.5 Large fp8, TurboX 8-step acceleration, SD 3.5 Medium turbo (gated, optional) |
 | [`qwen-image`](../profiles/examples/qwen-image/) | `qwen21-turbo-t2i` | ~27 GB core / ~43 GB | Qwen-Image 2.1 Turbo T2I, full text-to-image, and Turbo / full image editing |
 | [`minimax-h3-image`](../profiles/examples/minimax-h3-image/) | `h3-t2i` | ~44.9 GB core / ~79 GB | MiniMax-H3-Image 33.1B DiT W4A8 (L4-optimized zero-OOM), Qwen3-VL 32B INT8, 6-step native 4K T2I & Multi-Ref Edit |
+| [`minimax-h3-video`](../profiles/examples/minimax-h3-video/) | `h3-t2v` | ~42 GB core | MiniMax-H3 33B video with native audio on a 40 GB A100: pruned INT8 ConvRot DiT, Qwen3-VL 32B NVFP4, official T2V & I2V templates, optional 8-step Lightning LoRA (needs `COLAB_ACCELERATOR=A100`) |
 
 ---
 

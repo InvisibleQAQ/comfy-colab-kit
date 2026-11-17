@@ -40,3 +40,4 @@
 - [profiles/examples/sd-latest/README.md](profiles/examples/sd-latest/README.md): Stable Diffusion 3.5 Large fp8 & TurboX profile
 - [profiles/examples/qwen-image/README.md](profiles/examples/qwen-image/README.md): Qwen-Image 2.1 Turbo T2I & Edit profile
 - [profiles/examples/minimax-h3-image/README.md](profiles/examples/minimax-h3-image/README.md): MiniMax-H3-Image 33.1B DiT (W4A8 fast L4 · Qwen3-VL 32B · T2I & Multi-Ref Edit) profile
+- [profiles/examples/minimax-h3-video/README.md](profiles/examples/minimax-h3-video/README.md): MiniMax-H3 33B video with audio (A100 40 GB · pruned INT8 DiT · Qwen3-VL 32B NVFP4 · T2V & I2V) profile

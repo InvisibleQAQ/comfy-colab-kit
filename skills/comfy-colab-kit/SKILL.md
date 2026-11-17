@@ -1,6 +1,6 @@
 ---
 name: comfy-colab-kit
-description: ComfyUI on Colab L4 GPU gate operator. Wake, switch profiles (moss-image, flux-klein, wan-ltx-video, sd-latest, qwen-image, minimax-h3-image), check CU budget, upload reference images, generate images (Txt2Img / Img2Img / ReferenceLatent edit) or videos (Wan 2.2 TI2V / LTX-Video), and release compute.
+description: ComfyUI on Colab L4 GPU gate operator. Wake, switch profiles (moss-image, flux-klein, wan-ltx-video, sd-latest, qwen-image, minimax-h3-image, minimax-h3-video), check CU budget, upload reference images, generate images (Txt2Img / Img2Img / ReferenceLatent edit) or videos (Wan 2.2 TI2V / LTX-Video), and release compute.
 ---
 
 # Comfy Colab Kit Operator Skill (`/comfy-colab-kit`)
@@ -63,7 +63,7 @@ Agent 操作网关时，网关地址与凭据按以下优先级解析：
 | `ckit validate [PATH]` | **校验 Profile**：校验 `profiles/` 下的 YAML Schema、工作流引用与 SHA-256 |
 | `ckit status [--json]` | 检查 GPU 实例状态、当前模型 Profile、排队情况与 CU 余额 |
 | `ckit profiles [--json]` | 查询网关支持的所有模型 Profiles 及 Workflows 工作流列表 |
-| `ckit wake [--profile ID] [--wait]` | 唤醒或加入 GPU 实例（可选 `moss-image` / `flux-klein` / `wan-ltx-video` / `sd-latest` / `qwen-image` / `minimax-h3-image`） |
+| `ckit wake [--profile ID] [--wait]` | 唤醒或加入 GPU 实例（可选 `moss-image` / `flux-klein` / `wan-ltx-video` / `sd-latest` / `qwen-image` / `minimax-h3-image` / `minimax-h3-video`） |
 | `ckit generate --prompt "..." [--preset "..."] [--width N] [--height N] [--seed N] [--timeout 300]` | **执行文生图或文生视频**：自动适配当前活跃 Profile（`moss-image`、`flux-klein`、`wan-ltx-video`、`sd-latest`、`qwen-image`、`minimax-h3-image`） |
 | `ckit generate --prompt "..." --image <PATH_OR_URL> [--denoise 0.75] [--timeout 300]` | **执行图生图 / 指令改图 / 首帧图生视频**：自动上传本地图片或 URL 到 `/upload/image` 并根据当前 Profile 执行重绘、FLUX.2 Klein `ReferenceLatent` 改图或 Wan 2.2 5B 首帧生视频 |
 | `ckit stop` | 立即关闭 GPU 实例，停止扣费 |
@@ -124,6 +124,7 @@ ckit profiles --json   # Agent 结构化 JSON
 | `sd-latest` | Stable Diffusion 3.5 Large fp8 + TurboX 8-step | ~15 GB / ~15s | SD 3.5 生态风格文生图 |
 | `qwen-image` | Qwen-Image 2.1 int8 Turbo T2I + Edit | ~27 GB / ~28s | 中英文文字渲染海报、Qwen 图像编辑 |
 | `minimax-h3-image` | MiniMax-H3-Image 33.1B DiT W4A8 + Qwen3-VL 32B INT8 | ~44.9 GB / ~45s | 原生 16MP (4K) 极速出图 (6 步)、多达 16 图的统一参考编辑与融合 |
+| `minimax-h3-video` | MiniMax-H3 33B 剪枝 INT8 ConvRot + Qwen3-VL 32B NVFP4（A100 40GB，需 `COLAB_ACCELERATOR=A100`） | ~42 GB / ~87s | 带原生立体声音轨的文生视频、首帧图生视频，可选 8 步 Lightning 加速 |
 
 > **`/_gate/profiles` 只返回工作流的元数据**（`id` / `title` / `optional` / `license` / `prefetch` / `size_gb`），**不返回可提交的 node graph**。要提交任务：
 > - 直接调用 MCP `gate_txt2img` 或 `gate_img2img`（或 `ckit generate`），它们会根据当前激活的 Profile 自动构建对应的文生图、指令改图或视频生成节点图！
