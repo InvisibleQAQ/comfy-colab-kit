@@ -109,7 +109,9 @@ stateDiagram-v2
 
 > [!IMPORTANT]
 > **Compute Unit (CU) Accrual**:
-> Compute units accrue continuously whenever a Colab VM exists in Google's cloud. Therefore, **all boot states** (`allocating`, `installing`, `downloading`, `booting`, `smoke_testing`), **`ready`**, **`switching`**, and **`failed`** are designated as **billing states**. If a session enters `failed`, the gate's auto-stop engine promptly executes `colab stop` to prevent unintentional credit consumption.
+> Compute units accrue continuously whenever a Colab VM exists in Google's cloud. Therefore, **all boot states** (`allocating`, `installing`, `downloading`, `booting`, `smoke_testing`), **`ready`**, **`switching`**, and **`failed`** are designated as **billing states**. The local ledger skips `allocating` and
+> `failed` until `colab new` has returned (`Session.vm_assigned`), because an allocation that Colab refuses (HTTP 503,
+> no capacity) creates no VM and is not charged. If a session enters `failed`, the gate's auto-stop engine promptly executes `colab stop` to prevent unintentional credit consumption.
 
 ---
 

@@ -147,6 +147,9 @@ class Session:
         self.fetching: list[str] = []
         self.fetch_error = ""
         self._last_accrual = clock()
+        #: a Colab VM exists for this session (`colab new` returned, or one was already running). While
+        #: allocating or after a failed allocation there is no VM yet, so nothing is billed.
+        self.vm_assigned = False
         self.machine.listeners.append(self._on_state_event)
 
     def _on_state_event(self, ev: Event) -> None:
@@ -196,6 +199,7 @@ class Session:
         tmp.write_text(json.dumps({**self.machine.snapshot(), "workflows": self.workflows,
                                    "woken_by": self.woken_by,
                                    "woken_by_ip": self.woken_by_ip,
+                                   "vm_assigned": self.vm_assigned,
                                    "last_activity": self.last_activity,
                                    "progress": self.progress,
                                    "stage_durations": self.stage_durations}))
@@ -222,6 +226,8 @@ class Session:
             self.last_activity = d.get("last_activity", self.clock())
             self.progress = d.get("progress") or {}
             self.stage_durations = d.get("stage_durations") or {}
+            # state files written before this flag existed: assume a VM exists unless sleeping (never under-bill)
+            self.vm_assigned = bool(d.get("vm_assigned", st != State.SLEEPING))
             if st == State.STOPPING:
                 m.state = State.FAILED  # stop was interrupted; tick() will retry it
                 m.reason = "stop interrupted by gate restart"
@@ -342,6 +348,7 @@ class Session:
             self.woken_by_ip = ip or ""
             m.profile, self.workflows, self.progress = pid, workflows, {}
             self.parallel = {}
+            self.vm_assigned = False
             m.to(State.ALLOCATING, f"wake by {by or ip or 'unknown'}")
             self.last_activity = self.clock()
             self.persist()
@@ -493,6 +500,7 @@ class Session:
                 self.persist()
                 return
         m.to(State.SLEEPING, reason)
+        self.vm_assigned = False
         self.woken_by = ""
         self.woken_by_ip = ""
         self.progress = {}
@@ -505,9 +513,22 @@ class Session:
 
     def _accrue(self) -> None:
         now = self.clock()
-        if self.machine.is_billing:
+        if self._billing_now():
             self.ledger.add((now - self._last_accrual) / 3600 * self.settings.auto_stop.cu_per_hour, now)
         self._last_accrual = now
+
+    def _billing_now(self) -> bool:
+        """CU accrue in billing states, except while allocating (or failed) before Colab assigned a VM:
+        a `colab new` that keeps answering 503 creates no VM and costs nothing."""
+        m = self.machine
+        if not m.is_billing:
+            return False
+        return self.vm_assigned or m.state not in (State.ALLOCATING, State.FAILED)
+
+    def _mark_vm_assigned(self) -> None:
+        self._accrue()  # close the unbilled allocation interval first
+        self.vm_assigned = True
+        self.persist()
 
     def _snapshot(self) -> stopper.Snapshot:
         m = self.machine
@@ -639,6 +660,7 @@ class Session:
                 shape = " high-RAM" if self.settings.colab_high_mem else ""
                 self.bus.publish("log", f"allocating Colab {self.settings.colab_accelerator}{shape} VM …")
                 await self.colab.new(name, self.settings.colab_accelerator)
+            self._mark_vm_assigned()
             tgz = self._kit_tarball(plan)
             try:
                 await self.colab.upload(name, tgz, "/content/kit.tgz")

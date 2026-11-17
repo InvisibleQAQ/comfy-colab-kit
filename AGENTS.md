@@ -37,7 +37,9 @@ ready → switching → (downloading | booting | ready)          failed → allo
 installing|downloading → ready   (setup found ComfyUI already running on a reused VM)
 ```
 
-Billing states (CU accrues): every boot state, `ready`, `switching`, `failed`.
+Billing states (CU accrues): every boot state, `ready`, `switching`, `failed` — except that `allocating` and
+`failed` accrue only once Colab has assigned a VM (`Session.vm_assigned`); a `colab new` that keeps answering 503
+creates no VM and costs nothing.
 
 ## 🚨 Rules that must not be broken
 

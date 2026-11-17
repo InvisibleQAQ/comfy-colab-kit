@@ -109,6 +109,55 @@ async def test_stop_releases_vm_and_accrues_cu(tmp_path):
     assert sum(s.ledger.per_day.values()) == pytest.approx(1.71, rel=1e-3)
 
 
+async def test_billing_starts_when_colab_assigns_the_vm(tmp_path):
+    t = [1_000_000.0]
+    colab = FakeColab()
+    real_new = colab.new
+
+    async def slow_new(name, accelerator):  # Colab answers 503 for 30 min before a VM is assigned
+        t[0] += 1800
+        await real_new(name, accelerator)
+    colab.new = slow_new
+    s = make(tmp_path, colab)
+    s.clock = s.machine.clock = lambda: t[0]
+    s._last_accrual = t[0]
+    await s.wake(None)
+    await wait_for(lambda: s.machine.state == State.READY)
+    assert s.vm_assigned and json.loads((tmp_path / "session.json").read_text())["vm_assigned"] is True
+    t[0] += 3600
+    await s.stop("test")
+    assert sum(s.ledger.per_day.values()) == pytest.approx(1.71, rel=1e-3)  # 1 h with a VM, not 1.5 h
+    assert s.vm_assigned is False
+
+
+async def test_failed_allocation_is_not_billed(tmp_path):
+    t = [1_000_000.0]
+    colab = FakeColab()
+
+    async def no_capacity(name, accelerator):
+        t[0] += 200
+        raise ColabError("colab new failed (1): 503 Service Unavailable")
+    colab.new = no_capacity
+    s = make(tmp_path, colab)
+    s.clock = s.machine.clock = lambda: t[0]
+    s._last_accrual = t[0]
+    await s.wake(None)
+    await wait_for(lambda: s.machine.state == State.FAILED)
+    t[0] += 600
+    s._accrue()
+    await s.stop("auto:failed")
+    assert s.machine.state == State.SLEEPING
+    assert sum(s.ledger.per_day.values()) == 0
+
+
+def test_restore_without_vm_flag_assumes_a_vm_unless_sleeping(tmp_path):
+    for state, expected in (("ready", True), ("failed", True), ("sleeping", False)):
+        (tmp_path / "session.json").write_text(json.dumps({"state": state, "profile": "tiny", "since": 1}))
+        s = make(tmp_path, FakeColab())
+        s.restore()
+        assert s.vm_assigned is expected, state
+
+
 async def test_stop_when_vm_already_unassigned_goes_to_sleep(tmp_path):
     colab = FakeColab()
     async def fake_stop(name):

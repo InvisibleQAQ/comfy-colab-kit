@@ -99,7 +99,7 @@ and a separate process keeps the cost guard alive after that.
 
 ## 📊 Local Compute Unit (CU) Ledger
 
-Compute units accrue continuously whenever the session is in a billing state (`allocating`, `installing`, `downloading`, `booting`, `smoke_testing`, `ready`, `switching`, `failed`).
+Compute units accrue continuously whenever the session is in a billing state (`allocating`, `installing`, `downloading`, `booting`, `smoke_testing`, `ready`, `switching`, `failed`). `allocating` and `failed` only accrue once Colab has assigned a VM: an allocation refused with HTTP 503 (no capacity) creates no VM, costs nothing, and is not counted against the budgets.
 - The gate updates an on-disk ledger (`data/state/cu_ledger.json`) tracking `today` and `month` usage based on `CU_PER_HOUR` (default: 1.71 for Colab L4).
 - The background loop queries `colab ccu-info` periodically to refresh the ground-truth Google balance.
 - Live CU metrics are surfaced to viewers on the Wake card and exposed via `GET /_gate/status`.
