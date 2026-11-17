@@ -36,6 +36,28 @@ def test_env_overrides_and_hosts():
     assert (s.listen_host, s.listen_port) == ("127.0.0.1", 9000)
 
 
+def test_colab_high_mem_setting():
+    assert Settings.from_env(BASE).colab_high_mem is False
+    assert Settings.from_env({**BASE, "COLAB_HIGH_MEM": "true"}).colab_high_mem is True
+    with pytest.raises(ConfigError):
+        Settings.from_env({**BASE, "COLAB_HIGH_MEM": "maybe"})
+
+
+async def test_colab_cli_new_requests_high_mem_shape():
+    from gate.colab import ColabCLI
+
+    calls = []
+
+    class Recorder(ColabCLI):
+        async def _run(self, *args, stdin=None, timeout=600):
+            calls.append(args)
+            return ""
+
+    await Recorder(high_mem=True).new("comfy", "A100")
+    await Recorder().new("comfy", "L4")
+    assert calls == [("new", "-s", "comfy", "--gpu", "A100", "--high-mem"), ("new", "-s", "comfy", "--gpu", "L4")]
+
+
 @pytest.mark.parametrize("env", [
     {"IDLE_TIMEOUT_MIN": "abc"}, {"IDLE_TIMEOUT_MIN": "-1"}, {"QUIET_HOURS": "1-2"},
     {"OWNER_ONLY_ACTIONS": "stop,delete"}, {"DEFAULT_VIEW": "canvas"}, {"WAKE_ON_VISIT": "maybe"},

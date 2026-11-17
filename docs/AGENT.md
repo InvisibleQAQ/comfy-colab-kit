@@ -113,6 +113,7 @@ Key fields to configure:
 - `CF_ACCESS_AUD`: `<Your Cloudflare Access Audience Tag>`
 - `OWNER_EMAILS`: `["admin@yourdomain.com"]`
 - `COLAB_ACCELERATOR`: `L4`
+- `COLAB_HIGH_MEM`: `false` (`true` requests the high-RAM shape; community reports say that on `A100` this is the 80 GB variant)
 - `COLAB_SESSION_NAME`: `comfy`
 
 ---

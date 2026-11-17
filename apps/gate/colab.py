@@ -49,8 +49,11 @@ class ColabRunner(Protocol):
 
 
 class ColabCLI:
-    def __init__(self, binary: str = "colab", token_dir: str = ""):
+    def __init__(self, binary: str = "colab", token_dir: str = "", high_mem: bool = False):
         self.binary = binary
+        # high-RAM machine shape (`colab new --high-mem`); community reports say that on A100 this is the
+        # 80 GB variant (not verified here)
+        self.high_mem = high_mem
         self.env = dict(os.environ)
         if token_dir:
             # google-colab-cli keeps its token under ~/.config/colab-cli; point HOME-relative config there
@@ -85,7 +88,10 @@ class ColabCLI:
         return parse_sessions(out)
 
     async def new(self, name: str, accelerator: str) -> None:
-        await self._run("new", "-s", name, "--gpu", accelerator, timeout=600)
+        args = ["new", "-s", name, "--gpu", accelerator]
+        if self.high_mem:
+            args.append("--high-mem")
+        await self._run(*args, timeout=600)
 
     async def upload(self, name: str, src: str, dst: str) -> None:
         await self._run("upload", "-s", name, src, dst, timeout=600)

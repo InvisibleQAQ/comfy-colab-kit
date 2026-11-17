@@ -636,7 +636,8 @@ class Session:
             self.progress = {}
             self.parallel = {}
             if name not in await self.colab.sessions():
-                self.bus.publish("log", f"allocating Colab {self.settings.colab_accelerator} VM …")
+                shape = " high-RAM" if self.settings.colab_high_mem else ""
+                self.bus.publish("log", f"allocating Colab {self.settings.colab_accelerator}{shape} VM …")
                 await self.colab.new(name, self.settings.colab_accelerator)
             tgz = self._kit_tarball(plan)
             try:

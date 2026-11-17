@@ -782,7 +782,8 @@ def build_app(settings: Settings, colab: ColabRunner | None = None,
     app[JWKS] = (JWKSCache(settings.cf_access_team_domain, _fetch_json)
                    if settings.cf_access_team_domain else None)
     app[AGENT_TOKEN] = read_secret_file(settings.agent_token_file)
-    session = Session(settings, profiles, colab or ColabCLI(settings.colab_bin, settings.colab_token_dir))
+    session = Session(settings, profiles, colab or ColabCLI(settings.colab_bin, settings.colab_token_dir,
+                                                                 high_mem=settings.colab_high_mem))
     session.restore()
     app[SESSION] = session
     app[PROXY] = Proxy(settings.backend_url, settings.cf_service_token_file, session.touch,

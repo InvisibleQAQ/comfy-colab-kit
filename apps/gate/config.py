@@ -119,6 +119,7 @@ class Settings:
     colab_bin: str = "colab"
     colab_token_dir: str = ""
     colab_accelerator: str = "L4"
+    colab_high_mem: bool = False
     colab_session_name: str = "comfy"
     profiles: tuple[str, ...] = (
         "profiles/examples/moss-image",
@@ -208,6 +209,7 @@ class Settings:
             colab_bin=(env.get("COLAB_BIN") or "colab").strip(),
             colab_token_dir=(env.get("COLAB_TOKEN_DIR") or ("/data/colab-cli" if os.path.isdir("/data") and os.access("/data", os.W_OK) else "./data/colab-cli")).strip(),
             colab_accelerator=(env.get("COLAB_ACCELERATOR") or "L4").strip(),
+            colab_high_mem=_bool(env, "COLAB_HIGH_MEM", False),
             colab_session_name=(env.get("COLAB_SESSION_NAME") or "comfy").strip(),
             profiles=tuple(_csv(env.get("PROFILES"))) or Settings.profiles,
             default_profile=(env.get("DEFAULT_PROFILE") or "moss-image").strip(),
