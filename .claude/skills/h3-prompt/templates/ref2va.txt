@@ -1,0 +1,27 @@
+subject_definitions:
+<Subject 1> is {{who: the role in one phrase}} in <Picture 1>: {{what the picture shows: species or age and gender, body shape, face, hair, clothing with colours, props, drawing style}}.
+<Subject 2> is {{who}} in <Picture 2>: {{appearance, same level of detail as Subject 1}}.
+<Subject 3> is {{the location}} shown in {{the pinned frames | <Picture N>}}: {{fixed furniture and props with colours and positions, wall, light}}.
+<Audio 1> is the voice-timbre reference for <Subject {{n}}> (S1): {{pitch, age, texture, speed, breathing, emotion and delivery in 15-30 English words}}.
+<Audio 2> is the voice-timbre reference for <Subject {{n}}> (S2): {{voice description}}.
+
+summary:
+[{{task types joined with " + "}}] The target video is {{style in a few words}} in <Subject 3>. {{Who does what, in playback order, in two to four sentences.}} The video starts from the pinned first frame and passes through the pinned keyframes at {{MM:SS.mmm, MM:SS.mmm}}. The voices follow <Audio 1> and <Audio 2>.
+
+retention_analysis:
+<Subject 1> (appears in [Shot 1], [Shot 2]): fully_preserved - {{the features that must stay the same}}.
+<Subject 2> (appears in [Shot 1], [Shot 2]): fully_preserved - {{the features that must stay the same}}.
+<Subject 3> (appears in [Shot 1], [Shot 2]): fully_preserved - {{the props and layout that stay in place}}.
+<Audio 1>: reference - {{the speaker}}'s lines closely imitate the {{voice description}} of <Audio 1> without copying its words.
+<Audio 2>: reference - {{the speaker}}'s lines follow the {{voice description}} of <Audio 2> without copying its words.
+
+detailed_description:
+The target video is {{style: medium, line work, shading, palette, light, camera (say what it does, e.g. a static eye-level camera), pacing}}.
+[Shot 1] The shot begins from the pinned first frame: {{shot size and angle}} of <Subject 3>. {{Where each subject is and what they hold, as visible in the first frame.}} {{First action.}} <Subject {{n}}> (S1) {{delivery: speed, volume, emotion}} in the {{voice description}} of <Audio 1>, <d>[Chinese] {{confirmed line 1, copied exactly}}</d> {{Reaction or small action.}} <Subject {{n}}> (S2) {{delivery}} in the {{voice description}} of <Audio 2>, <d>[Chinese] {{confirmed line 2}}</d> {{Next action, with the sound it makes.}}
+[Shot 2] At {{MM:SS.mmm}}, the shot cuts to {{new shot size and angle}}. At {{MM:SS.mmm}} the frame matches the pinned keyframe: {{the exact state at that moment: poses, props, screens}}. {{Actions in order, one per sentence, each with its sound.}} <Subject {{n}}> (S1) {{delivery}}, <d>[Chinese] {{confirmed line 3}}</d> {{Final action and how the video ends.}} No subtitles or on-screen text appear.
+
+overall_soundscape:
+{{Room tone plus the physical sounds of the actions above, in one to four sentences.}}
+
+non_diegetic_music:
+{{N/A | instruments, tempo and how the volume develops, in one to three sentences}}

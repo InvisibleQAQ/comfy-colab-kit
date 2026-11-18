@@ -96,23 +96,27 @@ outputs/<视频ID>/
    - 每个关键动作的结束状态：主机竖起后黑屏（4.4 秒）、放倒后恢复（6.0 秒）、拔电源后熄屏（8.3 秒）。
 3. 遇到小贴纸，先找出它的边界框（例如统计接近纯白的连通区域），再用 `python T frame src/ref.mp4 0.034 seg1/refs/anchor_00.0s.png --delogo x:y:w:h` 抹掉。
 4. 从干净帧里裁出每个角色的半身图，作为角色参考图。不要用带修补痕迹的帧。同一角色在所有段里用同一张图。
-5. 为每个说话人拼一段音色参考，长度 3 到 12 秒：`python T voice <素材> seg1/refs/voice_<角色>.wav 0.0-1.38 2.12-3.12 …`。
+5. 为每个说话人拼一段音色参考，长度 3 到 12 秒，所有参考音频合计不超过 15 秒（MiniMax 的官方限制，本地节点不拦）：`python T voice <素材> seg1/refs/voice_<角色>.wav 0.0-1.38 2.12-3.12 …`。
    - 优先从没有背景音乐的时段截取原片混音。
    - 不要用分轨分离出来、底下原本有配乐的人声。v1 就是这样做的，结果音色被磨平，听起来不像。
 
 ### 6. 写结构化提示词
 
-格式依据 H3 官方的参考模式写作指南（HF `MiniMaxAI/MiniMax-H3` 的 `docs/VIDEO_PROMPT_WRITING_GUIDE_ref_en.md`）。完整范例见 `prompts/h3_prompt_example.txt`。
+提示词的写法和检查统一按 `.claude/skills/h3-prompt/` 执行，本步不再重复规则。复刻场景的取值：
 
-- 正文用英文，分六节：`subject_definitions`、`summary`、`retention_analysis`、`detailed_description`、`overall_soundscape`、`non_diegetic_music`。
-- `summary` 的任务类型写 `[keyframe completion + reference generation + audio reference]`。
-- `<Picture N>` 按 Studio 里参考图的上传顺序编号。
-- 锚点经 `MiniMaxH3AddGuide` 只进入潜空间，不进文本编码器，所以不占 `<Picture N>` 编号。在正文里写成 `the pinned first frame`、`the pinned keyframe at 00:04.400`。
-- `<Audio N>` 按 Studio 里参考音频的上传顺序编号。说话人编号 `(S1)`、`(S2)` 按台词首次出现的顺序分配。写法是 `<Audio 1> is the voice-timbre reference for <Subject 2> (S1): …`，后面接声音描述。声音描述可以采用第 8 步对比结果里的 `how_to_describe_original_in_english`。
-- 台词写成 `<d>[Chinese] 原文。</d>`。本次中文台词全部生成正确。
-- 按时间顺序写出每个动作，包括台词之间的小动作。硬切写成 `[Shot N] At MM:SS.mmm, the shot cuts to …`。
-- 在 `detailed_description` 末尾写 `No subtitles or on-screen text appear.`，标题和字幕留到后期。
-- 原片这段没有背景音乐时，`non_diegetic_music` 写 `None.`。
+- 模式：ref2va，用 `templates/ref2va.txt`。
+- `summary` 的任务类型：`[keyframe completion + reference generation + audio reference]`。
+- 嗓音描述：采用第 8 步对比结果里的 `how_to_describe_original_in_english`（第一版先用第 3 步 Qwen 给的说话人特征）。
+- 台词：把第 4 步用户确认的转写写进 `segN/lines.txt`，一行一句。
+- 写完后运行检查，0 个 ERROR 才进入第 7 步：
+
+  ```bash
+  python .claude/skills/h3-prompt/scripts/h3_prompt_lint.py segN/prompt_vK.txt --mode ref2va \
+    --images <参考图数> --duration <段长> --anchors <锚点秒数，逗号分隔> \
+    --lines segN/lines.txt --audio-files <按上传顺序列出音色参考>
+  ```
+
+`prompts/h3_prompt_example.txt` 是 seg1 v2 实际运行的提示词，保持原样。它有三处不符合新规范（检查脚本报 3 个 WARN），新写的提示词不要照抄这三处，详见 h3-prompt 技能的「已知问题」。
 
 ### 7. 在 Studio 里生成
 

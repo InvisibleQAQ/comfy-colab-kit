@@ -1,0 +1,7 @@
+For the target video, at 0.00 seconds into the target video, <Picture 1> (from [Shot 1]) is fully referenced.
+
+integrated_multimodal_description: [Shot 1] {{Style word taken from the picture}}, {{the subjects, composition and setting exactly as <Picture 1> shows them}}. {{Camera move: type + amplitude + speed, or a static shot.}} {{The first action starts.}} {{The action develops, one step per sentence, with sounds.}} {{The result or reaction at the end.}}
+
+overall_soundscape: {{Ambience plus action sounds, in one to four sentences.}}
+
+non_diegetic_music: {{N/A | instruments, tempo and how the volume develops}}

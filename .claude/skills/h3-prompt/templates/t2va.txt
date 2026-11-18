@@ -1,0 +1,5 @@
+integrated_multimodal_description: [Shot 1] {{Style word: Live-action, cinematic | 2D-animated | 3D CG | claymation}}, {{shot size and framing}} {{the scene, then each subject with appearance and position}}. {{Camera move as a sentence: type + amplitude + speed, or a static shot.}} {{Actions in playback order, one per sentence, with the sounds they make.}} The {{speaker description: age, gender, voice}} (S1) says: <d>[{{Language}}] {{the line, copied exactly}}</d> {{What happens after the line.}} [Shot 2] At {{MM:SS.mmm}}, the camera cuts to {{new framing and what it shows}}.
+
+overall_soundscape: {{Ambience plus action sounds, in one to four sentences.}}
+
+non_diegetic_music: {{N/A | instruments, tempo and how the volume develops}}
