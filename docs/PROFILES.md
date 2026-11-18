@@ -124,6 +124,36 @@ To create your own model profile (e.g. for a custom Flux or SDXL setup):
 
 ---
 
+<a id="studio-modes"></a>
+## 5. Studio modes
+
+A workflow can also be offered on the [Studio page](STUDIO.md), the one-page video maker, by naming the mode it
+serves:
+
+```yaml
+workflows:
+  - id: h3-t2v
+    file: workflows/official_minimax_h3_t2v.json
+    studio: t2v        # t2v | i2v | r2v | keyframes
+```
+
+| Mode | Used when the user adds | Template requirements |
+| :--- | :--- | :--- |
+| `t2v` | nothing | a `MiniMaxH3ImageToVideo` node |
+| `i2v` | a first frame (and maybe a last frame) | a `MiniMaxH3ImageToVideo` node |
+| `r2v` | reference images, videos or audio | a `MiniMaxH3ReferenceToVideo` node |
+| `keyframes` | at least one pinned anchor | `MiniMaxH3ReferenceToVideo` plus a `MiniMaxH3AddGuide` chain to copy |
+
+- At most one workflow per mode. The profile loader rejects unknown modes and duplicates.
+- The workflow file stays untouched. The Studio converts it with the frontend's own `graphToPrompt()` at run
+  time and only patches values, media loaders and the anchor chain (see [STUDIO.md](STUDIO.md#how-a-run-is-built)).
+- Duration, size, seed and the Lightning switch are found by node class, following links to the `Primitive*`
+  node that holds a value. A template built differently fails with a clear error instead of running the wrong
+  graph.
+- The Studio shows when at least one installed workflow has a `studio` mode. Other profiles keep App mode.
+
+---
+
 ## 🌟 Upstream Credits & Model Acknowledgments
 
 We celebrate the creators and open-source communities behind the profiles supported in this repository:

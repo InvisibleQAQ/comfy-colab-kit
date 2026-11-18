@@ -135,6 +135,7 @@
 - **后端只认服务令牌**：Colab 隧道主机名只放行网关的 Access 服务令牌。
 - **极速冷启动与 L4 硬件性能榨干**：自研并行 HTTP Range 下载器在 T0 第一毫秒将 24.9 GB 模型直灌内存盘 tmpfs（峰值超 1,000 MB/s / 8.77 Gbps），完全重叠依赖安装与 ComfyUI 启动；`--highvram` 启动参数将 18GB 模型全套常驻 L4 的 24GB 显存，100% 缓存保留零 PCIe 颠簸。整机冷启动仅需约 90 秒（一分半左右），热态 1024×1024 出图仅需 26.8 秒。
 - **App 模式优先**：工作流写入 ComfyUI App 模式元数据；注入的浮层可在 App ⇄ 节点图之间切换。
+- **视频工作室（Studio）**：不用碰节点的一页式视频生成。写描述，按需放首尾帧、参考图 / 视频 / 声音或固定画面锚点；生成记录保存在浏览器里，GPU 释放后仍能回看、下载、复用。页面由 ComfyUI 自己提供，走 SSH 隧道也能用（[docs/STUDIO.md](docs/STUDIO.md)）。
 - **ComfyUI 完整透传**：透传图生图参考图上传 `/upload/image`、工作流排队 `/prompt`、历史记录 `/history`、图片查看 `/view`、节点 Schema `/object_info`、硬件负载 `/system_stats` 及 WebSocket `/ws`。
 - **对 Agent 极度友好**：RFC 8628 设备码一键配对（`ckit auth`）、网页端一键复制 AI 接入指令（智能复用未激活令牌）、`docs/MCP.md`、`skills/comfy-colab-kit/SKILL.md`、`docs/AGENT_SKILL.md`、`llms.txt`。
 

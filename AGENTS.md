@@ -17,6 +17,7 @@ The repository is structured as a clean engineering monorepo:
 | `apps/gate/web/` | Web UI | Wake page (`index.html`), `bg.js`, `overlay.js` (App ⇄ Graph via `Comfy.ToggleLinear`) | Zero-RTT SSR-like injection, no build step |
 | `apps/site/` | Landing App | Promo marketing & architecture documentation showcase | Pure static HTML/CSS/JS (Cloudflare Pages) |
 | `packages/colab/` | VM Runtime | Runs in Colab kernel; prints `KIT_STAGE/KIT_PROGRESS/KIT_READY/KIT_FAILED` | stdlib + huggingface_hub only |
+| `packages/colab/studio/` | Studio page | One-page video maker shipped as the kit node's frontend extension (`docs/STUDIO.md`) | Patches the frontend's `graphToPrompt()` output only; `patch.js` is unit-tested by `tests/studio/` |
 | `packages/cli/` | CLI Tool | `ckit` command line utility for operators and agents | Python stdlib CLI |
 | `packages/schemas/` | Schema Package | JSON schema (`profile.schema.json`) | Validates all profiles |
 | `profiles/examples/` | Community Profiles | `moss-image` (primary), `flux-klein`, `wan-ltx-video`, `sd-latest`, `qwen-image`, `minimax-h3-image`, `minimax-h3-video` | Community workflows only |
@@ -86,6 +87,12 @@ creates no VM and costs nothing.
   pin `frontend.package` in profiles. Never serialize `widgets` on node JSON dictionaries; widget labels
   persist through canonical backing slots with `widget: {name: wname}` (see `docs/APP_MODE.md`).
 - macOS ships bash 3.2: shell scripts must avoid `mapfile`, `${var,,}` etc.
+- The Studio overlay sits on top of a live ComfyUI page: it must swallow key, paste and drop events (ComfyUI's
+  Ctrl+Enter would queue the hidden graph) and close the temporary tab each conversion opens (the frontend
+  restores open tabs on reload).
+- Through an SSH tunnel the gate cannot see the Studio: it renews a `/_gate/presence` lease and pings `/queue`
+  from a Web Worker timer. A background tab's own timers drop to about once a minute after 5 minutes, and that
+  let `page_closed` release the GPU mid-render.
 
 ## 🧪 Tests & verification
 

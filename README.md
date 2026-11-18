@@ -136,6 +136,7 @@ Traditional Colab forces you to sit in front of a computer, manually run noteboo
 - **Backend locked to a service token** — the Colab tunnel hostname only admits the gate's Access service token.
 - **Fast cold start & L4 hardware acceleration** — a parallel HTTP Range downloader streams the 24.9 GB MOSS-Image profile at T0 straight into a RAM tmpfs at up to 1,096 MB/s (8.77 Gbps), overlapping tool installs and ComfyUI boot. `--highvram` keeps the entire 18 GB model suite resident in L4's 24 GB VRAM with 100% cache retention (zero PCIe swapping), yielding ~90 s (~1.5 min) cold starts and 26.8 s warm 1024×1024 generations.
 - **App mode first** — workflows get ComfyUI App-mode metadata; the injected overlay toggles App ⇄ Graph.
+- **Studio for video** — a one-page video maker with no nodes: describe, add first/last frames, reference images, videos and voices, or pin anchors. Records play, download and reuse from the browser after the GPU is released. Served by ComfyUI itself, so it also works through a plain SSH tunnel ([docs/STUDIO.md](docs/STUDIO.md)).
 - **Full ComfyUI API passthrough** — transparently proxies `/upload/image` for Img2Img reference images, `/prompt`, `/history`, `/view`, `/object_info`, `/system_stats`, `/queue`, and WebSocket `/ws`.
 - **Autonomous Agent friendly** — RFC 8628 device flow (`ckit auth`), 1-click prompt copy in Web UI, `docs/AGENT_SKILL.md`, `docs/MCP.md`, `skills/comfy-colab-kit/SKILL.md`, and `llms.txt`.
 

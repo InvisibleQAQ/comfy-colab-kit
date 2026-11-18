@@ -59,11 +59,14 @@ def build_plan(profile: Profile, settings: Settings, workflow_ids: list[str] | N
              "inline": (profile.path / w.file).read_text() if w.file else None, "format": w.format,
              "loras": [hf_to_https(u) for u in w.loras],
              "app_inputs": [list(x) for x in w.app_inputs], "app_outputs": list(w.app_outputs),
-             "overrides": list(w.overrides), "default": w.id == profile.app_default}
+             "overrides": list(w.overrides), "default": w.id == profile.app_default,
+             **({"studio": w.studio} if w.studio else {})}
             for w in (profile.workflows[i] for i in wf_ids)
         ],
         "on_demand": {w: [m.id for m in profile.models_for([w]) if m.id not in models]
                       for w in wf_ids if any(m.id not in models for m in profile.models_for([w]))},
+        "on_demand_gb": {w: round(sum(m.size_gb or 0 for m in profile.models_for([w]) if m.id not in models), 2)
+                         for w in wf_ids if any(m.id not in models for m in profile.models_for([w]))},
         "smoke": ({"api_url": hf_to_https(profile.smoke.api_url), "timeout_s": profile.smoke.timeout_s}
                   if settings.enable_smoke_test and profile.smoke else None),
         "model_aliases": {f: profile.models[mid].dest.rsplit("/", 1)[-1]

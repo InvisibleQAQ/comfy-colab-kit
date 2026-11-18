@@ -16,6 +16,8 @@ import yaml
 
 FORBIDDEN_KEY = re.compile(r"(token|secret|password|passwd|api[_-]?key|authorization|cookie|credential)", re.I)
 ID_RE = re.compile(r"^[a-z0-9][a-z0-9-]{0,62}$")
+#: modes of the Studio page (packages/colab/studio): text, first/last frame, references, references + anchors
+STUDIO_MODES = ("t2v", "i2v", "r2v", "keyframes")
 URL_RE = re.compile(r"^(https://[^\s?#]+|hf://[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+(@[A-Za-z0-9_.-]+)?/[^\s?#]+)$")
 MODEL_DIRS = {"checkpoints", "diffusion_models", "text_encoders", "clip", "vae", "loras", "upscale_models",
               "controlnet", "embeddings", "clip_vision", "unet", "rapid_moss", "model_patches"}
@@ -67,6 +69,7 @@ class Workflow:
     source: str = ""
     loras: tuple[str, ...] = ()  # extra LoRA URLs (hf://…) downloaded into models/loras/
     prefetch: bool = False  # download this workflow's models in the background on every wake (else on demand)
+    studio: str = ""  # Studio page mode this workflow serves (t2v | i2v | r2v | keyframes), "" = not in the Studio
 
 
 @dataclass(frozen=True)
@@ -220,9 +223,14 @@ def parse_profile(data: dict, path: Path) -> Profile:
         outputs = tuple(app.get("outputs") or [])
         # outputs may be empty: some official templates keep SaveImage inside a subgraph,
         # in which case App mode shows the subgraph's own outputs.
+        studio = str(w.get("studio") or "")
+        if studio and studio not in STUDIO_MODES:
+            raise ProfileError(f"{ctx}: studio must be one of {'|'.join(STUDIO_MODES)}")
+        if studio and any(o.studio == studio for o in workflows.values()):
+            raise ProfileError(f"{ctx}: another workflow already serves studio mode '{studio}'")
         workflows[wid] = Workflow(wid, str(w.get("title", wid)), url, str(lic), fmt, wm, wn, inputs, outputs,
                                   tuple(w.get("overrides") or []), bool(w.get("optional", False)),
-                                  file, str(w.get("source", "")), loras, bool(w.get("prefetch", False)))
+                                  file, str(w.get("source", "")), loras, bool(w.get("prefetch", False)), studio)
     # a scaffold profile may have no workflows yet; then app_default is optional
     app_default = data.get("app_default") or (None if not workflows else _req(data, "app_default", pid))
     if workflows and app_default not in workflows:

@@ -878,15 +878,24 @@ def install_workflows(update_default=True):
             default_file = name
         print(f"  workflow {name} ({wf['title']})", flush=True)
     if update_default:
-        workflows_summary = [
-            {"id": w["id"], "title": w.get("title", w["id"]), "file": f"{w['id']}.json"}
-            for w in PLAN.get("workflows", [])
-        ]
-        json.dump({"default_workflow": default_file, "default_view": PLAN.get("default_view", "app"),
-                   "workflows": workflows_summary},
-                  open(f"{COMFY}/user/default/kit.json", "w"))
+        json.dump(kit_info(default_file), open(f"{COMFY}/user/default/kit.json", "w"))
         if default_file and os.path.exists(f"{d}/{default_file}"):
             shutil.copy(f"{d}/{default_file}", f"{COMFY}/default_workflow.json")
+
+
+def kit_info(default_file):
+    """What the kit's ComfyUI node serves at /kit/info: installed workflows (with their Studio mode, if any) and the
+    size of the models each on-demand workflow still has to fetch."""
+    return {
+        "default_workflow": default_file,
+        "default_view": PLAN.get("default_view", "app"),
+        "workflows": [
+            {"id": w["id"], "title": w.get("title", w["id"]), "file": f"{w['id']}.json",
+             **({"studio": w["studio"]} if w.get("studio") else {})}
+            for w in PLAN.get("workflows", [])
+        ],
+        "on_demand_gb": PLAN.get("on_demand_gb") or {},
+    }
 
 
 def apply_settings():
@@ -1008,11 +1017,30 @@ app.registerExtension({
 '''
 
 
+STUDIO_SRC = os.path.join(os.path.dirname(os.path.abspath(__file__)), "studio")
+
+
+def install_studio(web_dir):
+    """Ship the Studio page (studio/*.js|css next to this file) as part of the kit node's frontend extension."""
+    dst = os.path.join(web_dir, "studio")
+    if os.path.isdir(dst):
+        shutil.rmtree(dst)
+    if not os.path.isdir(STUDIO_SRC):
+        print(f"studio: {STUDIO_SRC} not found, Studio page not installed", flush=True)
+        return False
+    os.makedirs(dst)
+    for name in sorted(os.listdir(STUDIO_SRC)):
+        if name.endswith((".js", ".css")):
+            shutil.copyfile(os.path.join(STUDIO_SRC, name), os.path.join(dst, name))
+    return True
+
+
 def install_custom_nodes():
     base = f"{COMFY}/custom_nodes"
     os.makedirs(f"{base}/kit_heartbeat/web", exist_ok=True)
     open(f"{base}/kit_heartbeat/__init__.py", "w").write(HEARTBEAT_NODE)
     open(f"{base}/kit_heartbeat/web/kit.js", "w").write(KIT_JS)
+    install_studio(f"{base}/kit_heartbeat/web")
     for n in PLAN.get("custom_nodes", []):
         dst = f"{base}/{n['id']}"
         if os.path.isdir(dst):

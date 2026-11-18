@@ -26,6 +26,7 @@ Choose the reading path tailored to your specific role and objective:
 - **If you want to know how users or agents connect**: Read [`ACCESS.md`](ACCESS.md) for web browser, guest token link, LAN, CLI, and AI agent connection paths.
 - **If you are deploying on a cloud VPS**: Start with [`DEPLOY_VPS.md`](DEPLOY_VPS.md) for Docker Compose setup, or consult [`AGENT.md`](AGENT.md) for a complete credentials procurement walkthrough.
 - **If you are adding or customizing models**: Read [`PROFILES.md`](PROFILES.md) to understand YAML schemas, model aliasing, and workflow policies, or hand [`AGENT_SCAFFOLDING.md`](AGENT_SCAFFOLDING.md) to your AI coding agent to scaffold a new profile or adapt a fork for any Colab GPU service.
+- **If you want to make videos without the node graph**: Read [`STUDIO.md`](STUDIO.md) for the one-page Studio (text, first frame, references, pinned anchors, records kept in the browser).
 - **If you are maintaining workflow UI or App Mode forms**: Read [`APP_MODE.md`](APP_MODE.md) and inspect [`skills/comfy-workflow-ui/`](../skills/comfy-workflow-ui/) for UI validation invariants.
 - **If you are building an AI agent**: Read [`AGENT_SKILL.md`](AGENT_SKILL.md) and [`API.md`](API.md) to integrate automated wake, prompt queuing, and shutdown routines.
 - **If you want to configure cost protection**: Read [`AUTO_STOP.md`](AUTO_STOP.md) for idle detection, session limits, and Compute Unit (CU) ledger tracking.

@@ -230,6 +230,16 @@
             "type": "boolean",
             "description": "Download this workflow's models in the background on every wake. Default false: they are fetched on demand (POST /_gate/fetch)."
           },
+          "studio": {
+            "type": "string",
+            "enum": [
+              "t2v",
+              "i2v",
+              "r2v",
+              "keyframes"
+            ],
+            "description": "Serve this workflow on the Studio page (docs/STUDIO.md): t2v text to video, i2v first/last frame, r2v reference images/videos/audio, keyframes references plus pinned anchors. At most one workflow per mode."
+          },
           "models": {
             "type": "array",
             "items": {

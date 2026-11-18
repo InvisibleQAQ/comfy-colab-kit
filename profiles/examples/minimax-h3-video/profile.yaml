@@ -82,6 +82,7 @@ workflows:
   source: https://huggingface.co/Comfy-Org/MiniMax-H3
   license: MIT template; weights MiniMax H3 community license
   file: workflows/official_minimax_h3_t2v.json
+  studio: t2v
   upstream_url: https://raw.githubusercontent.com/Comfy-Org/workflow_templates/main/templates/video_minimax_h3_t2v.json
   upstream_sha256: 8149b64db94375cd01a7d46da0b4a4c7349d83dedf6b5e1026b460e5e202626f
   models:
@@ -117,6 +118,7 @@ workflows:
   source: https://huggingface.co/Comfy-Org/MiniMax-H3
   license: MIT template; weights MiniMax H3 community license
   file: workflows/official_minimax_h3_i2v.json
+  studio: i2v
   upstream_url: https://raw.githubusercontent.com/Comfy-Org/workflow_templates/main/templates/video_minimax_h3_i2v.json
   upstream_sha256: 8abdc39eff08babc9c731ecd05511355030d58a9ec1e90c5f266f8ee858e2eba
   models:
@@ -155,6 +157,7 @@ workflows:
   source: https://huggingface.co/Comfy-Org/MiniMax-H3
   license: MIT template; weights MiniMax H3 community license
   file: workflows/official_minimax_h3_r2v.json
+  studio: r2v
   upstream_url: https://raw.githubusercontent.com/Comfy-Org/workflow_templates/main/templates/video_minimax_h3_r2v.json
   upstream_sha256: a79f1a8ae7d250f9da8b0f4e636e202526c37457b808e74fdf25de7ceed96574
   models:
@@ -196,6 +199,7 @@ workflows:
   source: https://huggingface.co/Comfy-Org/MiniMax-H3
   license: MIT template; weights MiniMax H3 community license
   file: workflows/official_minimax_h3_multiframe_reference.json
+  studio: keyframes
   upstream_url: https://raw.githubusercontent.com/Comfy-Org/workflow_templates/main/templates/video_minimax_h3_multiframe_reference.json
   upstream_sha256: 6a2d22bec7b76b835124327c28e382aaf572ee54591dc23f49cd84ffdbb85d5d
   models:
