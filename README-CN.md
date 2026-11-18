@@ -228,7 +228,7 @@ docker compose -f deploy/docker-compose.yml up -d
 | [`sd-latest`](profiles/examples/sd-latest/) | Stable Diffusion 3.5：默认 Large fp8，TurboX 8 步，Medium 加速（需授权，可选） | 核心约 15 GB / 约 22 GB |
 | [`qwen-image`](profiles/examples/qwen-image/) | Qwen-Image 2.1：默认 Turbo 文生图，完整文生图，Turbo / 完整编辑 | 核心约 27 GB / 约 43 GB |
 | [`minimax-h3-image`](profiles/examples/minimax-h3-image/) | MiniMax-H3-Image：33.1B DiT W4A8 L4 专属极速默认，Qwen3-VL 32B INT8，6 步原生 4K 文生图与多参考图编辑 | 核心约 44.9 GB / 约 79 GB |
-| [`minimax-h3-video`](profiles/examples/minimax-h3-video/) | MiniMax-H3 带原生音轨的视频生成，跑在 40 GB A100 上：剪枝 INT8 ConvRot 主模型、Qwen3-VL 32B NVFP4、官方文生视频与图生视频模板，可选 8 步 Lightning 加速（需设 `COLAB_ACCELERATOR=A100`） | 核心约 42 GB |
+| [`minimax-h3-video`](profiles/examples/minimax-h3-video/) | MiniMax-H3 带原生音轨的视频生成，跑在 40 GB A100 上：剪枝 INT8 ConvRot 主模型、Qwen3-VL 32B NVFP4、官方文生视频、图生视频、参考图生视频与多关键帧参考模板，可选 Lightning 加速（需设 `COLAB_ACCELERATOR=A100`） | 核心约 42 GB / 约 65 GB |
 
 工作流**只用**社区已发布的版本，从作者处下载并记录来源与许可证。格式与透传选项见 [docs/PROFILES.md](docs/PROFILES.md)。
 

@@ -3,7 +3,8 @@
 MiniMax-H3 (MiniMaxAI, 33B omni-modal video model with native audio) on a Colab **A100, standard 40 GB shape**
 (measured 2026-11-17: A100-SXM4-40GB, 39.5 GiB usable VRAM, 89.6 GB system RAM, PyTorch 2.14.1+cu130,
 ~6.7 compute units per hour). The default workflow is **`h3-t2v` (text to video)**; **`h3-i2v` (image to video)**
-shares the same files.
+shares the same files. **`h3-r2v` (reference to video)** and **`h3-multiframe` (multi-frame reference)** run on a
+second DiT (`ref2va`) that is fetched on demand the first time one of them is opened.
 
 - **Accelerator**: the gate allocates `COLAB_ACCELERATOR` from `.env` for every profile, so set
   `COLAB_ACCELERATOR=A100` (and `COLAB_HIGH_MEM=false` for the 40 GB shape) before waking this profile. The
@@ -31,15 +32,22 @@ Source of truth: Comfy-Org MiniMax-H3 release and `workflow_templates` (2026-11)
 |---|---|---|---|---|
 | `h3-t2v` — Video · MiniMax-H3 Text to Video (official) | [Comfy-Org/MiniMax-H3](https://huggingface.co/Comfy-Org/MiniMax-H3) | MIT template; weights MiniMax H3 community license | vendored `workflows/official_minimax_h3_t2v.json` | ✅ default |
 | `h3-i2v` — Video · MiniMax-H3 Image to Video (official) | [Comfy-Org/MiniMax-H3](https://huggingface.co/Comfy-Org/MiniMax-H3) | MIT template; weights MiniMax H3 community license | vendored `workflows/official_minimax_h3_i2v.json` | ✅ |
+| `h3-r2v` — Video · MiniMax-H3 Reference to Video (official) | [Comfy-Org/MiniMax-H3](https://huggingface.co/Comfy-Org/MiniMax-H3) | MIT template; weights MiniMax H3 community license | vendored `workflows/official_minimax_h3_r2v.json` | ✅ (models on demand) |
+| `h3-multiframe` — Video · MiniMax-H3 Multi-Frame Reference (official) | [Comfy-Org/MiniMax-H3](https://huggingface.co/Comfy-Org/MiniMax-H3) | MIT template; weights MiniMax H3 community license | vendored `workflows/official_minimax_h3_multiframe_reference.json` | ✅ (models on demand) |
 
 App-mode form: prompt, aspect ratio, megapixels (template default 0.4 MP), duration in seconds (template default
-5 s), Lightning toggle and seed; `h3-i2v` adds the first-frame image. Output: `SaveVideo` (video with audio).
+5 s), Lightning toggle and seed; `h3-i2v` adds the first-frame image. `h3-r2v` takes two reference images that
+the prompt calls `<Picture 1>` / `<Picture 2>` (the node accepts up to 9 images, 3 reference videos with their
+soundtracks and 3 audio clips; wire the extra ones in the graph view). `h3-multiframe` takes a subject reference
+image plus three keyframe images, each pinned at a time in seconds that must lie inside the duration. Their
+Lightning toggle uses the 4-step ref2v LoRA. Output: `SaveVideo` (video with audio).
 
 ### Considered and excluded
 
 | Candidate | Reason |
 |---|---|
-| `video_minimax_h3_r2v.json` (reference to video) | Needs a second 20.97 GB DiT (`ref2va`) plus its own LoRA; not added until the on-demand path is verified on A100 |
+| `video_minimax_h3_fun_controlnet_union.json` (pose / depth control video) | Needs the ControlNet patch plus SDPose and RT-DETR models on top of the `ref2va` DiT; not tested on 40 GB |
+| `api_minimax_h3_max_lipsync.json` and other `api_*` templates | Run on MiniMax's paid cloud API through Comfy account credits, not on this GPU |
 | DiT bf16 (66.28 GB) / pruned bf16 (40.23 GB) | Do not fit a 40 GB A100 next to the text encoder and activations |
 
 ## Models
@@ -51,5 +59,9 @@ App-mode form: prompt, aspect ratio, megapixels (template default 0.4 MP), durat
 | `video-vae-int8` | `vae/minimax_h3_video_vae_int8_convrot.safetensors` | [Comfy-Org/MiniMax-H3](https://huggingface.co/Comfy-Org/MiniMax-H3) | minimax-h3-community-license-agreement | 2.81 | core |
 | `audio-vae` | `vae/minimax_h3_audio_vae_fp32.safetensors` | [Comfy-Org/MiniMax-H3](https://huggingface.co/Comfy-Org/MiniMax-H3) | minimax-h3-community-license-agreement | 0.61 | core |
 | `lightning-8step` | `loras/minimax_h3_fl2v_turbo_8step_v1.0_comfyui_bf16.safetensors` | [lightx2v/Minimax-h3-Turbo](https://huggingface.co/lightx2v/Minimax-h3-Turbo) | minimax-h3-community-license-agreement | 1.96 | core |
+| `dit-ref2va-int8` | `diffusion_models/minimax_h3_ref2va_pruned_int8_convrot.safetensors` | [Comfy-Org/MiniMax-H3](https://huggingface.co/Comfy-Org/MiniMax-H3) | minimax-h3-community-license-agreement | 20.97 | on demand |
+| `lightning-ref2v-4step` | `loras/minimax_h3_ref2v_turbo_4step_v0.1_comfyui_bf16.safetensors` | [Comfy-Org/MiniMax-H3](https://huggingface.co/Comfy-Org/MiniMax-H3) | minimax-h3-community-license-agreement | 1.96 | on demand |
 
 A wake downloads **42.04 GB**. With `MODEL_STORE=ram` this fits the A100's RAM store with room left for ComfyUI.
+Opening `h3-r2v` or `h3-multiframe` fetches another **22.93 GB** (64.97 GB in all); files that no longer fit the
+RAM store land on the VM disk.

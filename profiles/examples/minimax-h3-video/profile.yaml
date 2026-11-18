@@ -2,6 +2,8 @@
 # Workflows are the official Comfy-Org templates (MIT, vendored unchanged) and load exactly these files:
 # pruned DiT INT8 ConvRot (20.97 GB), Qwen3-VL 32B NVFP4 text encoder (15.69 GB), video VAE INT8 (2.81 GB),
 # audio VAE fp32 (0.61 GB) and the lightx2v 8-step Lightning LoRA (1.96 GB, toggle in the form, off by default).
+# h3-r2v / h3-multiframe (reference to video) use a second pruned DiT, ref2va INT8 ConvRot (20.97 GB), and its
+# 4-step LoRA (1.96 GB); both are fetched on demand, so a plain wake still downloads 42.04 GB.
 # DiT + text encoder (~34 GiB) stay resident on the 40 GB card; the INT8 text encoder (27.14 GB) would not fit
 # alongside the DiT and would be offloaded to RAM on every run, so the template's NVFP4 encoder is kept.
 # yaml-language-server: $schema=../../../packages/schemas/profile.schema.json
@@ -61,6 +63,19 @@ models:
   sha256: 2339acdf19bfe123f46b971ea35d367a84adb85de43627e1eceafa5a5b2b111e
   size_gb: 1.96
   core: true
+# reference-to-video (h3-r2v, h3-multiframe): a second pruned DiT and its own 4-step LoRA, fetched on demand
+- id: dit-ref2va-int8
+  dest: diffusion_models/minimax_h3_ref2va_pruned_int8_convrot.safetensors
+  url: hf://Comfy-Org/MiniMax-H3/diffusion_models/minimax_h3_ref2va_pruned_int8_convrot.safetensors
+  license: minimax-h3-community-license-agreement
+  sha256: 9255f52b6677845ad238f20dfaafa94727053694127ab7f255c048f0f9365779
+  size_gb: 20.97
+- id: lightning-ref2v-4step
+  dest: loras/minimax_h3_ref2v_turbo_4step_v0.1_comfyui_bf16.safetensors
+  url: hf://Comfy-Org/MiniMax-H3/loras/minimax_h3_ref2v_turbo_4step_v0.1_comfyui_bf16.safetensors
+  license: minimax-h3-community-license-agreement
+  sha256: 5b9ab5ade15d0775676d01a907268a69a1468dc6033b3b0d3ded5502f3ebb84c
+  size_gb: 1.96
 workflows:
 - id: h3-t2v
   title: Video · MiniMax-H3 Text to Video (official)
@@ -131,6 +146,103 @@ workflows:
       - value
       - "Lightning 加速 (8 步 LoRA)"
     - - 105
+      - noise_seed
+      - "随机种子 (Seed)"
+    outputs:
+    - 92
+- id: h3-r2v
+  title: Video · MiniMax-H3 Reference to Video (official)
+  source: https://huggingface.co/Comfy-Org/MiniMax-H3
+  license: MIT template; weights MiniMax H3 community license
+  file: workflows/official_minimax_h3_r2v.json
+  upstream_url: https://raw.githubusercontent.com/Comfy-Org/workflow_templates/main/templates/video_minimax_h3_r2v.json
+  upstream_sha256: a79f1a8ae7d250f9da8b0f4e636e202526c37457b808e74fdf25de7ceed96574
+  models:
+  - dit-ref2va-int8
+  - te-nvfp4
+  - video-vae-int8
+  - audio-vae
+  - lightning-ref2v-4step
+  app:
+    inputs:
+    - - 138
+      - value
+      - "提示词 (Prompt，用 <Picture 1> / <Picture 2> 指代参考图)"
+    - - 137
+      - image
+      - "参考图 1 (<Picture 1>)"
+    - - 139
+      - image
+      - "参考图 2 (<Picture 2>)"
+    - - 115
+      - aspect_ratio
+      - "画面比例 (Aspect Ratio)"
+    - - 115
+      - megapixels
+      - "分辨率 / 百万像素 (Megapixels)"
+    - - 132
+      - value
+      - "时长 / 秒 (Duration s)"
+    - - 146
+      - value
+      - "Lightning 加速 (4 步 LoRA)"
+    - - 129
+      - noise_seed
+      - "随机种子 (Seed)"
+    outputs:
+    - 92
+- id: h3-multiframe
+  title: Video · MiniMax-H3 Multi-Frame Reference (official)
+  source: https://huggingface.co/Comfy-Org/MiniMax-H3
+  license: MIT template; weights MiniMax H3 community license
+  file: workflows/official_minimax_h3_multiframe_reference.json
+  upstream_url: https://raw.githubusercontent.com/Comfy-Org/workflow_templates/main/templates/video_minimax_h3_multiframe_reference.json
+  upstream_sha256: 6a2d22bec7b76b835124327c28e382aaf572ee54591dc23f49cd84ffdbb85d5d
+  models:
+  - dit-ref2va-int8
+  - te-nvfp4
+  - video-vae-int8
+  - audio-vae
+  - lightning-ref2v-4step
+  app:
+    inputs:
+    - - 138
+      - value
+      - "提示词 (Prompt，<Picture 1> 指主体参考图)"
+    - - 164
+      - image
+      - "主体参考图 (<Picture 1>)"
+    - - 157
+      - image
+      - "关键帧 1 图片"
+    - - 154
+      - value
+      - "关键帧 1 位置 / 秒"
+    - - 159
+      - image
+      - "关键帧 2 图片"
+    - - 160
+      - value
+      - "关键帧 2 位置 / 秒"
+    - - 167
+      - image
+      - "关键帧 3 图片"
+    - - 168
+      - value
+      - "关键帧 3 位置 / 秒（须小于时长）"
+    - - 115
+      - aspect_ratio
+      - "画面比例 (Aspect Ratio)"
+    - - 115
+      - megapixels
+      - "分辨率 / 百万像素 (Megapixels)"
+    - - 132
+      - value
+      - "时长 / 秒 (Duration s)"
+    - - 146
+      - value
+      - "Lightning 加速 (4 步 LoRA)"
+    - - 129
       - noise_seed
       - "随机种子 (Seed)"
     outputs:

@@ -124,7 +124,7 @@ ckit profiles --json   # Agent 结构化 JSON
 | `sd-latest` | Stable Diffusion 3.5 Large fp8 + TurboX 8-step | ~15 GB / ~15s | SD 3.5 生态风格文生图 |
 | `qwen-image` | Qwen-Image 2.1 int8 Turbo T2I + Edit | ~27 GB / ~28s | 中英文文字渲染海报、Qwen 图像编辑 |
 | `minimax-h3-image` | MiniMax-H3-Image 33.1B DiT W4A8 + Qwen3-VL 32B INT8 | ~44.9 GB / ~45s | 原生 16MP (4K) 极速出图 (6 步)、多达 16 图的统一参考编辑与融合 |
-| `minimax-h3-video` | MiniMax-H3 33B 剪枝 INT8 ConvRot + Qwen3-VL 32B NVFP4（A100 40GB，需 `COLAB_ACCELERATOR=A100`） | ~42 GB / ~87s | 带原生立体声音轨的文生视频、首帧图生视频，可选 8 步 Lightning 加速 |
+| `minimax-h3-video` | MiniMax-H3 33B 剪枝 INT8 ConvRot + Qwen3-VL 32B NVFP4（A100 40GB，需 `COLAB_ACCELERATOR=A100`） | ~42 GB / ~87s | 带原生立体声音轨的文生视频、首帧图生视频；参考图生视频与多关键帧参考（`ref2va` 主模型按需下载约 23 GB），可选 Lightning 加速 |
 
 > **`/_gate/profiles` 只返回工作流的元数据**（`id` / `title` / `optional` / `license` / `prefetch` / `size_gb`），**不返回可提交的 node graph**。要提交任务：
 > - 直接调用 MCP `gate_txt2img` 或 `gate_img2img`（或 `ckit generate`），它们会根据当前激活的 Profile 自动构建对应的文生图、指令改图或视频生成节点图！
