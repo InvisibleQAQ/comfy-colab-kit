@@ -365,3 +365,60 @@ async def test_owner_only_control_session_policy(tmp_path):
 
 
 
+
+
+def _ready_session(tmp_path, clock, **env):
+    s = Settings.from_env({"AUTH_DISABLED": "true", "STATE_DIR": str(tmp_path), "DEFAULT_PROFILE": "tiny",
+                           "STOP_ON_PAGE_CLOSE_MIN": "5", "IDLE_TIMEOUT_MIN": "30", **env})
+    sess = Session(s, {"tiny": load_profile(ROOT / "tests/fixtures/profiles/tiny")}, FakeColab(), clock=lambda: clock[0])
+    for st in (State.ALLOCATING, State.INSTALLING, State.DOWNLOADING, State.BOOTING):
+        sess.machine.to(st)
+    sess.handle_line("KIT_READY {}")
+    return sess
+
+
+def test_presence_lease_counts_as_an_open_page_but_not_as_activity(tmp_path):
+    from gate import stopper
+    from gate.session import PRESENCE_LEASE_S
+
+    clock = [1_000_000.0]
+    sess = _ready_session(tmp_path, clock)
+    assert sess.open_clients == 0 and sess.clients_zero_since is not None
+    activity = sess.last_activity
+    clock[0] += 200
+    sess.presence("studio-tab")
+    assert sess.open_clients == 1 and sess.clients_zero_since is None
+    assert sess.last_activity == activity, "presence must not reset the idle timer"
+    # a page that keeps pinging is never page_closed, even with no activity for 10 minutes
+    for _ in range(20):
+        clock[0] += 30
+        sess.presence("studio-tab")
+        assert not stopper.evaluate(sess.settings.auto_stop, sess._snapshot()).stop
+    # pings stop: the lease lapses, then page_closed applies after STOP_ON_PAGE_CLOSE_MIN as for a closed tab
+    clock[0] += PRESENCE_LEASE_S + 1
+    snap = sess._snapshot()
+    assert snap.open_clients == 0 and snap.clients_zero_since == clock[0]
+    assert not stopper.evaluate(sess.settings.auto_stop, snap).stop
+    clock[0] += 5 * 60
+    assert stopper.evaluate(sess.settings.auto_stop, sess._snapshot()).reason == "page_closed"
+
+
+def test_presence_does_not_outlive_the_idle_timeout(tmp_path):
+    from gate import stopper
+
+    clock = [1_000_000.0]
+    sess = _ready_session(tmp_path, clock)
+    for _ in range(61):  # 30.5 minutes of an open but unused page
+        clock[0] += 30
+        sess.presence("studio-tab")
+    assert stopper.evaluate(sess.settings.auto_stop, sess._snapshot()).reason == "idle"
+
+
+def test_presence_leases_are_capped(tmp_path):
+    from gate.session import MAX_PRESENCE_LEASES
+
+    clock = [1_000_000.0]
+    sess = _ready_session(tmp_path, clock)
+    for i in range(MAX_PRESENCE_LEASES + 10):
+        sess.presence(f"tab-{i}")
+    assert sess.open_clients == MAX_PRESENCE_LEASES

@@ -30,6 +30,9 @@ from .profiles import Profile
 from .state import BOOT_STATES, Event, Machine, State
 
 log = logging.getLogger("gate.session")
+#: how long one /_gate/presence ping keeps a page counted as open (the Studio pings every 30 s)
+PRESENCE_LEASE_S = 90
+MAX_PRESENCE_LEASES = 32
 
 _SECRET_PATTERNS = [
     re.compile(r"Bearer\s+[A-Za-z0-9_\-\.]{20,}", re.IGNORECASE),
@@ -133,6 +136,9 @@ class Session:
         self.woken_by_ip: str = ""
         self.last_activity = clock()
         self.client_conns: dict[str, int] = {}
+        #: pages the gate cannot see (the Studio through an SSH tunnel) -> lease expiry; they count as open
+        #: clients for page_closed while they keep pinging /_gate/presence, but are not activity
+        self.presence_leases: dict[str, float] = {}
         self.open_clients = 0
         self.clients_zero_since: float | None = None
         self.queue_busy = False
@@ -460,8 +466,7 @@ class Session:
     def client_opened(self, cid: str = "") -> None:
         key = (cid or "").strip() or "default"
         self.client_conns[key] = self.client_conns.get(key, 0) + 1
-        self.open_clients = len(self.client_conns)
-        self.clients_zero_since = None
+        self._count_clients()
         self.bus.publish("state", self.status())
 
     def client_closed(self, cid: str = "") -> None:
@@ -470,10 +475,29 @@ class Session:
             self.client_conns[key] -= 1
             if self.client_conns[key] <= 0:
                 self.client_conns.pop(key, None)
-        self.open_clients = len(self.client_conns)
-        if self.open_clients == 0:
-            self.clients_zero_since = self.clock()
+        self._count_clients()
         self.bus.publish("state", self.status())
+
+    def presence(self, cid: str = "") -> None:
+        """A page that reaches ComfyUI without the gate (the Studio through an SSH tunnel) is still open. Unlike
+        touch(), this does not reset the idle timer: an open but unused page still idles out."""
+        key = (cid or "").strip()[:64] or "default"
+        if key not in self.presence_leases and len(self.presence_leases) >= MAX_PRESENCE_LEASES:
+            return
+        self.presence_leases[key] = self.clock() + PRESENCE_LEASE_S
+        self._count_clients()
+
+    def _count_clients(self) -> None:
+        """open_clients = connected tabs + unexpired presence leases; clients_zero_since = when that hit zero."""
+        now = self.clock()
+        for k in [k for k, t in self.presence_leases.items() if t <= now]:
+            del self.presence_leases[k]
+        n = len(self.client_conns) + len(self.presence_leases)
+        if n:
+            self.clients_zero_since = None
+        elif self.open_clients:  # just dropped to zero (noticing a lapsed lease late only delays a stop)
+            self.clients_zero_since = now
+        self.open_clients = n
 
     # ── internals ─────────────────────────────────────────────────────────
     async def _stop_locked(self, reason: str) -> None:
@@ -532,6 +556,8 @@ class Session:
 
     def _snapshot(self) -> stopper.Snapshot:
         m = self.machine
+        if self.presence_leases:
+            self._count_clients()
         return stopper.Snapshot(
             now=self.clock(), state=m.state, state_since=m.since, session_started=m.session_started,
             last_activity=self.last_activity, queue_busy=self.queue_busy, open_clients=self.open_clients,

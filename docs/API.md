@@ -25,6 +25,7 @@ All routes except `GET /_gate/healthz`, `GET /robots.txt`, and `GET /_gate/stati
 | `GET /_gate/healthz` | Container health probe (public) | `200 {"ok": true, "state": "..."}` |
 | `GET /_gate/status` | Current session state, telemetry, and CU ledger | `200` (see Status Object below) |
 | `GET /_gate/events` | Real-time Server-Sent Events (SSE) telemetry stream | `200 text/event-stream` (`state`, `progress`, `log`, `warn`) |
+| `GET\|POST /_gate/presence?cid=<tab>` | Keep a page the gate cannot see (Studio through an SSH tunnel) counted as open for `page_closed`: 90 s lease, not activity | `204` |
 | `GET /_gate/profiles` | Available model profiles, default selection, errors | `200` |
 | `POST /_gate/wake` | Wake a profile or join in-flight boot `{"profile": "id"}` | `202` started, `200 {"joined": true}`, `409 <refusal>` |
 | `POST /_gate/fetch` | Trigger on-demand download of optional workflows | `202`, `404`, `409` |

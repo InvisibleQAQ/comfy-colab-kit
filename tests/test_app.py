@@ -132,6 +132,21 @@ async def test_client_deduplication_by_cid(tmp_path):
         await c.close()
 
 
+async def test_presence_ping_counts_as_open_client(tmp_path):
+    c, app = await client(tmp_path)
+    sess = app[SESSION]
+    try:
+        activity = sess.last_activity
+        r = await c.get("/_gate/presence?cid=studio-abc")
+        assert r.status == 204
+        assert sess.open_clients == 1 and sess.clients_zero_since is None
+        assert sess.last_activity == activity
+        r = await c.post("/_gate/presence?cid=studio-abc", data="{}")
+        assert r.status == 204 and sess.open_clients == 1
+    finally:
+        await c.close()
+
+
 async def test_robots_txt_and_crawler_blocking(tmp_path):
     c, app = await client(tmp_path)
     try:

@@ -645,6 +645,13 @@ async def events(request: web.Request) -> web.StreamResponse:
     return resp
 
 
+async def presence(request: web.Request) -> web.Response:
+    """GET|POST /_gate/presence?cid=<tab>: a page that talks to ComfyUI without the gate (the Studio through an SSH
+    tunnel) is still open. Counts as an open client for page_closed for 90 s; does not reset the idle timer."""
+    request.app[SESSION].presence(request.query.get("cid", ""))
+    return web.Response(status=204)
+
+
 async def healthz(request: web.Request) -> web.Response:
     return web.json_response({"ok": True, "state": request.app[SESSION].machine.state.value})
 
@@ -796,6 +803,7 @@ def build_app(settings: Settings, colab: ColabRunner | None = None,
     r.add_get("/_gate/healthz", healthz)
     r.add_get("/_gate/status", status)
     r.add_get("/_gate/events", events)
+    r.add_route("*", "/_gate/presence", presence)
     r.add_get("/_gate/profiles", profiles_route)
     r.add_post("/_gate/wake", wake)
     r.add_post("/_gate/switch", switch)

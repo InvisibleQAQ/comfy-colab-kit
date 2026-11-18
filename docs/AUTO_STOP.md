@@ -69,6 +69,9 @@ Before `colab new` is called, the gate evaluates admission policies. If a rule t
 The gate evaluates inactivity using two complementary rules:
 1. **`idle` (`IDLE_TIMEOUT_MIN`)**: Measures elapsed time since the last HTTP request or WebSocket packet was processed.
 2. **`page_closed` (`STOP_ON_PAGE_CLOSE_MIN`)**: Measures elapsed time since the last active browser tab or client overlay disconnected.
+   A page that reaches ComfyUI without the gate (the [Studio](STUDIO.md) through an SSH tunnel) keeps itself
+   counted as open by pinging `/_gate/presence` every 30 s. Each ping is a 90-second lease and does not count as
+   activity, so an open page nobody uses still stops at `IDLE_TIMEOUT_MIN`.
 
 > [!IMPORTANT]
 > **Active Generation Protection**:

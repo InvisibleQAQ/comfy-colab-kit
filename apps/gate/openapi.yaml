@@ -86,6 +86,18 @@ paths:
         Events: `state` (Status JSON), `progress` (progress object), `log` (string; setup output, backlog replayed on connect),
         `warn` ({warn, remaining_s}). Comment pings every 20 s.
       responses: {"200": {description: text/event-stream}}
+  /_gate/presence:
+    parameters:
+      - {name: cid, in: query, required: false, schema: {type: string, maxLength: 64}, description: Tab id (one lease per tab)}
+    get:
+      summary: Keep a page the gate cannot see counted as open
+      description: |
+        For pages that reach ComfyUI without the gate (the Studio through an SSH tunnel). Each call is a 90-second
+        lease that counts as an open client for the page_closed rule. It is not activity: the idle timeout still applies.
+      responses: {"204": {description: lease renewed}}
+    post:
+      summary: Same as GET (accepts any body)
+      responses: {"204": {description: lease renewed}}
   /_gate/profiles:
     get:
       summary: Available profiles and validation errors
