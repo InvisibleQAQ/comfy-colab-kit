@@ -1,0 +1,7 @@
+How the reference pictures align with the target video — Picture 1 (from Shot 1) aligns with the 0.00-second mark of the target video; Picture 2 (from Shot {{N = number of the last shot}}) aligns with the {{S.SS = video length, two decimals}}-second mark of the target video.
+
+integrated_multimodal_description: [Shot 1] {{Style word}}, {{the subject begins in the position and framing established by Picture 1}}. {{Camera move.}} {{The visible path from the first state to the last: movement, pose changes, props, light, one step per sentence.}} {{The subject settles into the pose and composition established by Picture 2 at the end of the shot.}}
+
+overall_soundscape: {{Ambience plus action sounds, in one to four sentences.}}
+
+non_diegetic_music: {{N/A | instruments, tempo and how the volume develops}}
