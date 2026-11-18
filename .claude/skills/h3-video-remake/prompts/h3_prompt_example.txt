@@ -1,0 +1,27 @@
+subject_definitions:
+<Subject 1> is the capybara shop owner in <Picture 1>: a chubby anthropomorphic capybara drawn in flat 2D cartoon style, light-brown body with thick black outlines, small round black dot eyes, a darker brown muzzle with a black nose, small round ears, a little yellow citrus fruit with a tiny leaf sitting on top of his head, wearing a dark navy-grey short-sleeved T-shirt.
+<Subject 2> is the young male customer in <Picture 2>: a young man drawn in the same flat cartoon style, short messy spiky black hair, expressive eyebrows, a plain white short-sleeved crew-neck T-shirt and blue jeans.
+<Subject 3> is the cluttered computer repair workshop shown in the pinned frames: a light wooden workbench holding a black desktop PC case, a monitor showing the blue Windows 7 desktop, a plastic iced-coffee cup with a straw, a red-handled screwdriver and loose screws, with grey shelves behind stacked with beige vintage CRT monitors, old TV sets and microwaves against a pale grey wall.
+<Audio 1> is the voice-timbre reference for <Subject 2> (S1): a bright, slightly nasal young male voice that speaks fast and urgently, with audible breaths, uneven anxious intonation and casual, connected everyday delivery.
+<Audio 2> is the voice-timbre reference for <Subject 1> (S2), a calm, low, mature male voice.
+
+summary:
+[keyframe completion + reference generation + audio reference] The target video is a 2D cartoon comedy skit in <Subject 3>. <Subject 2> warns <Subject 1> not to stand his desktop PC upright because the screen goes black. <Subject 1> lifts the case upright, the monitor instantly goes black, he lays it back down and the picture returns. <Subject 2> says he was not lying; <Subject 1> reaches behind the PC and pulls out the power cable so the monitor turns off, says he will open it up, and picks up a screwdriver. The video starts from the pinned first frame and passes through the pinned keyframes at 00:04.400, 00:06.000 and 00:08.300. The voices follow <Audio 1> and <Audio 2>.
+
+retention_analysis:
+<Subject 1> (appears in [Shot 1], [Shot 2]): fully_preserved - the capybara's round body, dot eyes, brown muzzle, yellow citrus on his head and navy-grey T-shirt are kept exactly.
+<Subject 2> (appears in [Shot 1], [Shot 2]): fully_preserved - the young man's spiky black hair, white T-shirt and blue jeans are kept exactly.
+<Subject 3> (appears in [Shot 1], [Shot 2]): fully_preserved - the workbench, PC case, monitor, cup, screwdriver and the shelves of old electronics stay in the same places.
+<Audio 1>: reference - the customer's lines closely imitate the bright, nasal, hurried young male voice of <Audio 1>, including its breathiness and uneven pitch.
+<Audio 2>: reference - the shop owner's lines follow the calm low male timbre of <Audio 2> without copying its words.
+
+detailed_description:
+The target video is a flat 2D hand-drawn cartoon in a cute webcomic style: thick black outlines, simple cel shading, muted beige, grey, warm wood and blue tones, soft even indoor light, a static camera and snappy comedic timing.
+[Shot 1] The shot begins from the pinned first frame: a static eye-level medium shot across the workbench of <Subject 3>. <Subject 1> sits behind the bench on the left with both paws resting on a black desktop PC case lying flat on its side; the monitor behind it shows the blue Windows 7 desktop. <Subject 2> stands on the right, leaning in with both hands spread protectively over the case, eyes wide and mouth open. <Subject 2> (S1) blurts out fast and breathlessly in the bright, nasal young voice of <Audio 1>, <d>[Chinese] 老板，千万别竖起来！</d> <Subject 1> (S2) blinks and asks flatly in the calm low voice of <Audio 2>, <d>[Chinese] 为什么？</d> <Subject 2> (S1) answers quickly, almost whining, <d>[Chinese] 一竖起来就黑屏。</d> Right after the line <Subject 1> grabs the case with both paws and starts lifting it upright; the case scrapes on the desk.
+[Shot 2] At 00:04.333, the shot cuts to a slightly closer static medium shot. At 00:04.400 the frame matches the pinned keyframe: <Subject 1> holds the black PC tower upright on the desk in front of his face, and the monitor beside it has gone completely black with a short electric crackle; <Subject 2> stares at the dark screen with a blank, worried face. <Subject 1> tips the tower back down onto its side; it lands on the wooden desk with a heavy plastic-and-metal thump, and the blue Windows desktop lights up again on the monitor. At 00:06.000 the frame matches the second pinned keyframe: the case lies flat with its side panel facing up, <Subject 1> glares with furrowed brows and a frowning mouth, and <Subject 2> looks back at him, a little embarrassed. <Subject 2> (S1) turns to him and says quickly, slightly defensive and a bit nasal, <d>[Chinese] 你看，我没骗你吧。</d> Without a word, <Subject 1> reaches his right arm behind the monitor and the PC and yanks out the power cable with a small click; the monitor instantly switches off and turns dark grey. At 00:08.300 the frame matches the third pinned keyframe: the monitor is off and <Subject 1>'s right arm is still raised behind it, while <Subject 2> looks on, sulking. <Subject 1> lowers his arm, narrows his eyes and says firmly and calmly, <d>[Chinese] 我拆开看看。</d> As he speaks he picks up the red-handled screwdriver from the desk and points it at the case, then closes his mouth as the video ends. No subtitles or on-screen text appear.
+
+overall_soundscape:
+Quiet indoor workshop room tone with a faint electrical hum that stops when the power cable is pulled.
+
+non_diegetic_music:
+None.
