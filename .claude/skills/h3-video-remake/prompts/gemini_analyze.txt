@@ -1,0 +1,14 @@
+You are a film editor and storyboard artist. Watch this {DURATION}-second short video frame by frame and listen to its audio. The goal is to REMAKE it shot for shot with an AI video model, so be concrete and exhaustive. Describe only what is actually visible/audible; mark guesses with "(guess)".
+
+A shot-cut detector found these cut points (seconds): {CUTS}. Correct them if you see a cut it missed or a false cut.
+
+Return ONE JSON object (no markdown fences) with these keys:
+
+"style": art style in enough detail to reproduce it (live action or animation, line art, shading, palette, texture, lighting, rendering feel, aspect ratio, frame rate impression).
+"characters": array of {id, role, name_if_said, appearance (species/body, face, eyes, hair, clothing, props, colours, distinctive marks), personality, voice_impression}. Keep one id per character across the whole video.
+"setting": the location(s) and every recurring prop, with colours and positions.
+"shots": array of {n, start, end, shot_size, angle, camera_move, characters, action (what each character does, facial expression, gestures, lip movement, and every state change of props such as a screen turning on/off), props_and_close_ups, on_screen_text (exact text of subtitles / captions / stickers, with position, colour and when it appears), transition_in}.
+"dialogue": array of {start, end, speaker (character id or "narrator"), text (exact words in the original language), delivery (emotion, volume, speed)}. Transcribe the speech you hear, not only the burned-in subtitles.
+"sound": {"bgm": {description, instruments, tempo, mood, start, end, relative_volume}, "sfx": array of {time, sound, linked_visual_event}, "ambience": text}.
+"segments": split the video into plot segments for remaking. Rules: each segment is <= 15.0 seconds, starts and ends on a shot cut, and is a complete story beat (setup / attempt / reveal / punchline, etc.). Array of {id, start, end, duration, title_zh, story_beat_zh (one or two sentences in Chinese), shots (shot numbers), dialogue (the lines inside it)}.
+"story_zh": the whole plot in 3-5 Chinese sentences, including the joke/punchline.

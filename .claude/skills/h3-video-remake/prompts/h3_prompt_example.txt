@@ -1,0 +1,27 @@
+subject_definitions:
+<Subject 1> is the owl clockmaker in <Picture 1>: a plump anthropomorphic brown owl drawn in flat 2D cartoon style, thick black outlines, round amber eyes behind small round wire glasses, a short orange beak, a tan feathered belly, wearing a dark green work apron with a pencil in its front pocket.
+<Subject 2> is the little girl customer in <Picture 2>: a small girl drawn in the same flat cartoon style, two short black pigtails tied with red bands, rosy round cheeks, a bright yellow raincoat and red rain boots.
+<Subject 3> is the cozy clock repair shop shown in the pinned frames: a dark wooden counter holding a carved wooden cuckoo clock with a tiny red door, a brass desk lamp and a small tin of tweezers and screwdrivers, with a wall behind covered in round wall clocks and pendulum clocks against warm cream wallpaper.
+<Audio 1> is the voice-timbre reference for <Subject 2> (S1): a high, bright little girl's voice that speaks quickly and eagerly, with light breaths, a rising, pleading intonation and a lively, slightly whiny delivery.
+<Audio 2> is the voice-timbre reference for <Subject 1> (S2), a slow, low, warm elderly male voice.
+
+summary:
+[keyframe completion + reference generation + audio reference] The target video is a 2D cartoon comedy skit in <Subject 3>. <Subject 2> tells <Subject 1> that the little bird of her cuckoo clock stays stuck inside. <Subject 1> turns the hands to twelve, the bird jams halfway out, he taps the clock and it pops out; then he pulls a biscuit crumb out of the little doorway with tweezers and asks who has been feeding it biscuits. The video starts from the pinned first frame and passes through the pinned keyframes at 00:04.400, 00:06.000 and 00:08.300. The voices follow <Audio 1> and <Audio 2>.
+
+retention_analysis:
+<Subject 1> (appears in [Shot 1], [Shot 2]): fully_preserved - the owl's round body, amber eyes, round glasses, orange beak and dark green apron are kept exactly.
+<Subject 2> (appears in [Shot 1], [Shot 2]): fully_preserved - the girl's short pigtails with red bands, rosy cheeks and yellow raincoat are kept exactly.
+<Subject 3> (appears in [Shot 1], [Shot 2]): fully_preserved - the counter, cuckoo clock, brass lamp, tool tin and the wall of clocks stay in the same places.
+<Audio 1>: reference - the girl's lines closely imitate the high, bright, eager little girl's voice of <Audio 1>, including its light breaths and rising pitch.
+<Audio 2>: reference - the clockmaker's lines follow the slow, low, warm elderly male timbre of <Audio 2> without copying its words.
+
+detailed_description:
+The target video is a flat 2D hand-drawn cartoon in a cozy storybook style: thick black outlines, simple cel shading, warm wood, cream, brass and forest-green tones, soft lamplight, a static camera and gentle comedic timing.
+[Shot 1] The shot begins from the pinned first frame: a static eye-level medium shot across the counter of <Subject 3>. <Subject 1> stands behind the counter on the left with both wingtips resting beside the carved cuckoo clock, whose tiny red door is shut; the clock hands point a little before twelve. <Subject 2> stands on tiptoe on the right, her chin just above the counter edge, pointing at the little door. <Subject 2> (S1) says quickly and pleadingly in the high, bright little girl's voice of <Audio 1>, <d>[Chinese] 爷爷，小鸟不出来了。</d> <Subject 1> (S2) leans closer, adjusts his round glasses and says slowly in the low, warm voice of <Audio 2>, <d>[Chinese] 让我瞧瞧。</d> <Subject 2> (S1) adds eagerly, bouncing on her toes, <d>[Chinese] 一到整点就卡住。</d> Right after the line <Subject 1> pushes the minute hand up to twelve with one wingtip; the clock gives a soft whirring click.
+[Shot 2] At 00:04.333, the shot cuts to a closer static shot of the cuckoo clock with both characters at the edges of the frame. At 00:04.400 the frame matches the pinned keyframe: both clock hands point straight up, the tiny red door stands half open with the little wooden bird jammed halfway out, <Subject 1> peers at it through his glasses, and <Subject 2> covers her mouth with both hands. <Subject 1> taps the roof of the clock twice with his wingtip; with a springy twang the little bird pops all the way out and gives a bright two-note cuckoo call. At 00:06.000 the frame matches the second pinned keyframe: the bird stands fully out on its perch, <Subject 2> throws both arms up in delight, and <Subject 1> looks down at the open doorway with narrowed eyes. <Subject 2> (S1) cheers loudly, clapping her hands, <d>[Chinese] 出来了！</d> Without a word, <Subject 1> reaches into the little doorway with a pair of tweezers and pulls out a crumbly round biscuit fragment with a tiny scrape. At 00:08.300 the frame matches the third pinned keyframe: <Subject 1> holds the biscuit crumb up in the tweezers in front of his glasses, and <Subject 2> freezes mid-clap with a guilty, wide-eyed grin. <Subject 1> raises one feathery eyebrow, turns his head toward her and asks slowly and drily, <d>[Chinese] 谁喂它吃饼干了？</d> As he speaks he waves the crumb gently in front of her, then closes his beak, and the two hold that stare until the video ends. No subtitles or on-screen text appear.
+
+overall_soundscape:
+Quiet clock shop room tone with the steady ticking of many wall clocks behind the counter.
+
+non_diegetic_music:
+None.

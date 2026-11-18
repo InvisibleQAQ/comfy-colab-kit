@@ -1,0 +1,20 @@
+[Script Info]
+ScriptType: v4.00+
+PlayResX: 864
+PlayResY: 480
+WrapStyle: 2
+ScaledBorderAndShadow: yes
+
+[V4+ Styles]
+Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
+Style: Title,Microsoft YaHei,60,&H00CCBC8F,&H000000FF,&H00FFFFFF,&H64000000,1,0,0,0,100,100,2,0,1,6,2,8,10,10,62,1
+Style: Sub,Microsoft YaHei,30,&H0024E1F1,&H000000FF,&H00000000,&H00000000,1,0,0,0,100,100,1,0,1,2.5,0,2,10,10,26,1
+
+[Events]
+Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
+Dialogue: 1,0:00:00.10,0:00:03.60,Title,,0,0,0,,{\fad(120,150)\t(0,180,\fscx108\fscy108)\t(180,300,\fscx100\fscy100)}布谷鸟罢工了？！
+Dialogue: 0,0:00:00.10,0:00:01.60,Sub,,0,0,0,,爷爷小鸟不出来了
+Dialogue: 0,0:00:01.85,0:00:02.45,Sub,,0,0,0,,让我瞧瞧
+Dialogue: 0,0:00:02.60,0:00:03.70,Sub,,0,0,0,,{\fscx60\fscy60\t(0,180,\fscx110\fscy110)\t(180,260,\fscx100\fscy100)}一到整点就卡住
+Dialogue: 0,0:00:06.55,0:00:07.40,Sub,,0,0,0,,出来了
+Dialogue: 0,0:00:08.80,0:00:10.10,Sub,,0,0,0,,谁喂它吃饼干了
