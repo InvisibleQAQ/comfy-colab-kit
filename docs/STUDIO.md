@@ -1,9 +1,10 @@
 # Studio: a one-page video maker
 
-The Studio is a single page for making videos without touching the node graph. You write a description, pick
-the length, resolution and aspect ratio, and optionally add reference material. Then press **生成视频**. The
-records tab plays, downloads, reuses and deletes past results. ComfyUI is still there: **打开节点图** reveals
-it, and the button in the bottom-left corner brings the Studio back.
+The Studio is a single page for making videos without touching the node graph. Work is organized in projects,
+one per video. Every visit starts on **选择项目**: open a project or create one. Inside a project you write a
+description, pick the length, resolution and aspect ratio, and optionally add reference material. Then press
+**生成视频**. The records tab plays, downloads, reuses and deletes past results. ComfyUI is still there:
+**打开节点图** reveals it, and the button in the bottom-left corner brings the Studio back.
 
 The Studio is part of the kit's ComfyUI node on the VM (`packages/colab/studio/`, installed by `setup.py` into
 `custom_nodes/kit_heartbeat/web/studio/`). ComfyUI serves it, so it works the same in both setups:
@@ -13,6 +14,39 @@ The Studio is part of the kit's ComfyUI node on the VM (`packages/colab/studio/`
 
 It appears only when the active profile marks workflows with a `studio` mode
 ([PROFILES.md](PROFILES.md#studio-modes)). Today that is `minimax-h3-video` and the profiles copied from it.
+
+## Projects and the GPU queue
+
+A project is a name plus its own draft and records. Open several projects to work on several videos at once. The
+GPU renders one video at a time, so every project's jobs wait in ComfyUI's single queue, in the order they were
+submitted.
+
+- **Drafts:** each project keeps its own description and settings (in `localStorage`) and its own reference files
+  (in memory until the page is reloaded, as before). Switching projects never mixes them, even mid-submission.
+- **Records:** the records tab shows the open project; **全部项目** shows every project, each card labelled with its
+  project. A job carries its project in `extra_data.kit_studio.project`, so another browser rebuilds the same
+  projects from `/history`. Records made before projects existed belong to **默认项目**.
+- **Deleting a project** deletes its records and saved videos, and cancels its queued jobs.
+
+The **GPU 队列** panel appears above the tabs and on the project picker whenever anything is queued. It lists every
+job in run order: the project, the description, the phase and step of the running job, how many jobs are ahead of
+each waiting one, and when it should start. Click a row to open that project's records; **取消** removes a waiting
+job or interrupts the running one. Jobs queued from the node graph show as 节点图 rows.
+
+Estimates come from runs this browser watched: sampling seconds per second of video (by model family, resolution and
+标准 / 闪电), the time before sampling (split into warm runs and runs that first load their models), and the time
+after it. Until a setting has one finished run, its jobs and the ones behind them show only their position. Text
+and first-frame jobs (`fl2va`) and reference jobs (`ref2va`) run on different DiTs, so a queue that alternates
+between them reloads the models at each switch. The panel says how many loads that costs. Submitting jobs of the
+same kind back to back is faster.
+
+Step-by-step progress events only reach the page that submitted the job. Another tab or browser sees the job's
+position and an estimate, not its steps.
+
+Several tabs on the same origin stay in step. A tab picks up jobs queued by the others and adopts their saved
+records, so the reference files of a run stay attached. Project changes made in one tab show up in the others, and a
+tab whose open project was deleted elsewhere returns to the picker. Deleted records stay deleted: a running job keeps
+going until the interrupt lands, and its history entry is removed after that.
 
 ## What the form maps to
 
@@ -61,9 +95,11 @@ The Studio never stores or writes a graph. For each mode it:
 4. Uploads the files with `POST /upload/image` and queues the prompt with `POST /prompt`. The form values travel
    in `extra_data.kit_studio`, so `/history` can rebuild a record on another browser.
 
-Progress comes from ComfyUI's websocket events: queue position, phase, sampling steps with a remaining-time
-estimate, and live preview frames when **生成中预览** is on. A 10-second `/queue` + `/history` poll covers missed
-events.
+Progress comes from ComfyUI's websocket events: phase, sampling steps with a remaining-time estimate, and live
+preview frames when **生成中预览** is on. The queue order comes from `GET /queue`, refreshed whenever ComfyUI
+broadcasts a queue change and every 10 seconds while anything is queued. That poll and `/history` also cover missed
+events. The queue planning (order, estimates, model switches) is a pure module, `queue.js`, unit-tested in
+`tests/studio/queue.test.mjs`.
 
 ## Where results live
 

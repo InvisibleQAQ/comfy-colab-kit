@@ -1,4 +1,4 @@
-"""Studio page: profile key, plan/kit.json plumbing, VM install, and the JS prompt patcher (via node --test)."""
+"""Studio page: profile key, plan/kit.json plumbing, VM install, and the JS modules (via node --test)."""
 import copy
 import importlib.util
 import json
@@ -76,7 +76,7 @@ def test_install_studio_copies_assets(monkeypatch, tmp_path):
     (web / "studio").mkdir(parents=True)
     (web / "studio" / "stale.js").write_text("old")
     assert setup.install_studio(str(web)) is True
-    assert sorted(x.name for x in (web / "studio").iterdir()) == ["patch.js", "studio.css", "studio.js"]
+    assert sorted(x.name for x in (web / "studio").iterdir()) == ["patch.js", "queue.js", "studio.css", "studio.js"]
     assert (web / "studio" / "studio.js").read_bytes() == (STUDIO / "studio.js").read_bytes()
 
 
@@ -92,24 +92,27 @@ def test_kit_tarball_ships_the_studio():
             names = set(tar.getnames())
     finally:
         Path(path).unlink()
-    assert {"colab/setup.py", "colab/studio/studio.js", "colab/studio/patch.js", "colab/studio/studio.css"} <= names
+    assert {"colab/setup.py", "colab/studio/studio.js", "colab/studio/patch.js", "colab/studio/queue.js",
+            "colab/studio/studio.css"} <= names
 
 
 def test_studio_never_vendors_a_graph():
     """The page patches the frontend's own conversion of the installed workflows; it carries no workflow JSON."""
-    src = (STUDIO / "studio.js").read_text(encoding="utf-8") + (STUDIO / "patch.js").read_text(encoding="utf-8")
+    src = "".join((STUDIO / f).read_text(encoding="utf-8") for f in ("studio.js", "patch.js", "queue.js"))
     assert "graphToPrompt" in src and "/kit/workflows/" in src
     assert '"class_type": "' not in src and "widgets_values" not in src
 
 
 @pytest.mark.skipif(shutil.which("node") is None, reason="node is not installed")
-def test_patch_js_unit_tests():
-    r = subprocess.run(["node", "--test", "tests/studio/patch.test.mjs"], cwd=ROOT, capture_output=True, text=True, timeout=120)
+def test_studio_js_unit_tests():
+    """patch.js (the prompt patcher) and queue.js (queue order, estimates, projects)."""
+    r = subprocess.run(["node", "--test", "tests/studio/patch.test.mjs", "tests/studio/queue.test.mjs"], cwd=ROOT,
+                       capture_output=True, text=True, timeout=120)
     assert r.returncode == 0, r.stdout[-4000:] + r.stderr[-2000:]
 
 
 @pytest.mark.skipif(shutil.which("node") is None, reason="node is not installed")
 def test_studio_js_parses():
-    for f in ("studio.js", "patch.js"):
+    for f in ("studio.js", "patch.js", "queue.js"):
         r = subprocess.run(["node", "--check", str(STUDIO / f)], capture_output=True, text=True, timeout=60)
         assert r.returncode == 0, r.stderr

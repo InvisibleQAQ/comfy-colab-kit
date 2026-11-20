@@ -137,6 +137,7 @@ curl -X POST -H 'Content-Type: application/json' -d '{"workflows":["h3-multifram
 
 用 BrowserOS neo 操作 Studio 页面：
 
+0. 每次打开 Studio 都先停在「选择项目」页。一条片子用一个项目，按片子命名（例如「GTA 历史」）。已有项目点 `[data-project="<id>"]`（id 在 `window.kitStudio.projects.list` 里）；没有就点 `#ks-project-new`，给 `#ks-project-name` 赋值后点 `#ks-project-ok`。进入项目后才有 `#ks-prompt`。同时做两条片子时，各用各的项目，GPU 会按提交顺序排队，排队位置看「GPU 队列」面板（`#ks-queue`）。同一个项目里仍然一段生成完、检查完再提交下一段。
 1. 文件按钮（参考图的「+」、「+ 添加参考音频」、「+ 添加锚点」）用真实的 `page.click`。返回 `fileChooserOpen` 后，调用 `page.upload(null, [文件…])`。一次上传多个文件时，顺序保持不变。
 2. 其他按钮和标签页用页面内的 `.click()`。页面顶部的吸顶标题会挡住真实点击。
 3. 锚点时间：Studio 会给新锚点自动排时间（本次时长为 5 秒时排成 0 / 1.5 / 3 秒）。逐个设置 `input.ks-mini` 的值，并派发 `input` 事件。先把时长改好，再改锚点时间，因为锚点时间的上限是时长。

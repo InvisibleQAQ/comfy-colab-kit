@@ -7,13 +7,17 @@
 // A run = the installed workflow for the chosen mode, converted by the frontend's own graphToPrompt() once per
 // page, then patched (patch.js) and queued with POST /prompt. Results and the inputs that made them are kept in
 // this browser's IndexedDB, because the Colab disk is wiped when the GPU is released.
+//
+// Several videos can be in the works at once: each project keeps its own draft and records, every project's jobs
+// wait in ComfyUI's one queue (the GPU renders one at a time), and the queue panel shows the order with estimates.
 import { app } from "../../../scripts/app.js";
 import { api } from "../../../scripts/api.js";
 import * as P from "./patch.js";
+import * as Q from "./queue.js";
 
 const VERSION = 1;
 const MODE_LABEL = { t2v: "文生视频", i2v: "首尾帧", r2v: "参考生成", keyframes: "参考 + 固定画面" };
-const FAMILY = { t2v: "fl2va", i2v: "fl2va", r2v: "ref2va", keyframes: "ref2va" };
+const FAMILY = Q.FAMILY;
 const RES = [
   { key: "480", label: "480P", mp: 0.4, hint: "最快，适合试效果" },
   { key: "720", label: "720P", mp: 0.88, hint: "约 2 倍耗时" },
@@ -71,6 +75,9 @@ const ICON = {
   copy: '<rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/>',
   power: '<path d="M12 2v10"/><path d="M18.4 6.6a9 9 0 1 1-12.8 0"/>',
   bolt: '<path d="M13 2L4 14h7l-1 8 9-12h-7z"/>',
+  edit: '<path d="M4 20h4L19 9l-4-4L4 16z"/><path d="M14 6l4 4"/>',
+  queue: '<path d="M4 6h16M4 12h16M4 18h10"/><path d="M19 16v5M16.5 18.5h5"/>',
+  folder: '<path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>',
 };
 const icon = (name, size = 16) => {
   const s = document.createElementNS("http://www.w3.org/2000/svg", "svg");
@@ -93,6 +100,8 @@ const fmtTime = (t) => {
   if (d.toDateString() === now.toDateString()) return `今天 ${hm}`;
   return `${d.getMonth() + 1}月${d.getDate()}日 ${hm}`;
 };
+const fmtClock = (t) => new Date(t).toTimeString().slice(0, 5);
+const fmtMin = (s) => (s < 60 ? "1 分钟内" : `约 ${Math.round(s / 60)} 分钟`);
 const fmtBytes = (b) => (b > 1e9 ? `${(b / 1e9).toFixed(1)} GB` : b > 1e6 ? `${(b / 1e6).toFixed(1)} MB` : `${Math.round(b / 1e3)} KB`);
 const aspectKey = (a) => (/^(\d+:\d+)/.exec(a || "") || [])[1] || a;
 const aspectLabel = (a) => ASPECT_ZH[aspectKey(a)] || a;
@@ -130,16 +139,29 @@ const db = {
     });
   },
   allJobs() { return this.tx("jobs", "readonly", (s) => s.getAll()).then((r) => r || []); },
-  // fields starting with "_" are page-lifetime state (live progress, an in-flight copy) and must not persist
+  getJob(id) { return this.tx("jobs", "readonly", (s) => s.get(id)); },
+  // fields starting with "_" are page-lifetime state (live progress, an in-flight copy) and must not persist.
+  // Other tabs may hold copies of the same job: merge into the saved record instead of overwriting it.
   putJob(j) {
+    if (isDeleted(j.id)) return Promise.resolve();
     const rest = Object.fromEntries(Object.entries(j).filter(([k]) => !k.startsWith("_")));
-    return this.tx("jobs", "readwrite", (s) => s.put(rest)).catch((e) => console.warn("[studio] save job", e));
+    return this.tx("jobs", "readwrite", (s) => {
+      const r = s.get(rest.id);
+      r.onsuccess = () => s.put(Q.mergeJob(r.result, rest));
+    }).catch((e) => console.warn("[studio] save job", e));
   },
   delJob(id) { return this.tx("jobs", "readwrite", (s) => s.delete(id)); },
   getBlob(k) { return this.tx("blobs", "readonly", (s) => s.get(k)); },
   putBlob(k, b) { return this.tx("blobs", "readwrite", (s) => s.put(b, k)); },
   delBlob(k) { return this.tx("blobs", "readwrite", (s) => s.delete(k)); },
 };
+
+// Jobs deleted in this browser. A running job keeps running until the interrupt lands, and its history entry
+// appears after that, so the queue poll and the history sync of every tab must not import it again.
+const TOMBS = "kit.studio.deleted";
+const tombs = () => { try { return JSON.parse(localStorage.getItem(TOMBS) || "[]"); } catch { return []; } };
+const isDeleted = (id) => tombs().includes(id);
+function bury(ids) { try { localStorage.setItem(TOMBS, JSON.stringify([...tombs(), ...ids].slice(-300))); } catch { /* ignore */ } }
 
 // ───────────────────────── server access ─────────────────────────
 const kit = { info: null, byMode: {} };
@@ -307,20 +329,152 @@ async function upload(item) {
   return item.server;
 }
 
-// ───────────────────────── form state ─────────────────────────
-const DRAFT = "kit.studio.draft";
-const form = Object.assign({
-  prompt: "", speed: "standard", duration: 5, res: "480", aspect: "16:9 (Widescreen)", refOpen: false,
-  refMethod: "refs", advOpen: false, seed: "", preview: true, refImageSize: "match",
-}, (() => { try { return JSON.parse(localStorage.getItem(DRAFT) || "{}"); } catch { return {}; } })());
-Object.assign(form, { firstFrame: null, lastFrame: null, images: [], videos: [], audios: [], anchors: [] });
+// ───────────────────────── projects and form state ─────────────────────────
+// A project is a name plus its own draft. Jobs carry their project in meta.project, so /history can rebuild it on
+// another browser. The project list and each draft's plain fields live in localStorage; a draft's media files stay
+// in memory, as they always have.
+const PROJECTS = "kit.studio.projects";
+const DRAFT = "kit.studio.draft"; // + "." + project id; the bare key is the one draft of pages before projects
+const FORM_DEFAULTS = { prompt: "", speed: "standard", duration: 5, res: "480", aspect: "16:9 (Widescreen)", refOpen: false,
+  refMethod: "refs", advOpen: false, seed: "", refImageSize: "match" };
+const MEDIA_KEYS = ["firstFrame", "lastFrame", "images", "videos", "audios", "anchors"];
+const emptyMedia = () => ({ firstFrame: null, lastFrame: null, images: [], videos: [], audios: [], anchors: [] });
+const readJSON = (k) => { try { return JSON.parse(localStorage.getItem(k) || "null"); } catch { return null; } };
+
+const projects = (() => {
+  const saved = readJSON(PROJECTS) || {};
+  const list = Array.isArray(saved.list) ? saved.list.filter((p) => p && p.id && p.name) : [];
+  if (!list.length) list.push({ ...Q.DEFAULT_PROJECT, createdAt: Date.now() });
+  return { list, current: list.some((p) => p.id === saved.current) ? saved.current : list[0].id };
+})();
+const saveProjects = () => { try { localStorage.setItem(PROJECTS, JSON.stringify(projects)); } catch { /* private mode */ } };
+/** Take the list another tab saved (it may have created, renamed or deleted projects since this tab read it). */
+function syncProjects() {
+  const saved = readJSON(PROJECTS);
+  const list = Array.isArray(saved?.list) ? saved.list.filter((p) => p && p.id && p.name) : [];
+  if (list.length) projects.list = list;
+}
+function updateProjects(fn) { syncProjects(); fn(); saveProjects(); }
+const projectById = (id) => projects.list.find((p) => p.id === id) || null;
+const currentProject = () => projectById(projects.current) || projects.list[0];
+const jobProjectId = (job) => Q.projectOf(job.meta).id;
+const projectName = (id, fallback) => projectById(id)?.name || fallback || id;
+/** A record made in a project this browser does not know (another browser, or a cleared list) brings it back. */
+function ensureProject(meta) {
+  const p = Q.projectOf(meta);
+  if (projectById(p.id)) return;
+  updateProjects(() => { if (!projectById(p.id)) projects.list.push({ id: p.id, name: p.name, createdAt: meta?.createdAt || Date.now() }); });
+}
+
+const draftKey = (id) => `${DRAFT}.${id}`;
+function loadDraft(id) {
+  let d = readJSON(draftKey(id));
+  if (!d && id === Q.DEFAULT_PROJECT.id) d = readJSON(DRAFT);
+  return d && typeof d === "object" ? d : {};
+}
+// `form` is the current project's draft. A project switch mutates it in place, so window.kitStudio.form stays
+// valid; the media of the drafts that are not on screen wait in `drafts`. `preview` is a page preference.
+const form = Object.assign({ preview: true }, FORM_DEFAULTS, loadDraft(projects.current), emptyMedia());
+const drafts = new Map(); // project id -> { firstFrame, lastFrame, images, … } of a draft not on screen
 let draftTimer = 0;
+function writeDraft() {
+  clearTimeout(draftTimer);
+  const plain = Object.fromEntries(Object.entries(form).filter(([k]) => !MEDIA_KEYS.includes(k)));
+  try { localStorage.setItem(draftKey(projects.current), JSON.stringify(plain)); } catch { /* ignore */ }
+}
 function saveDraft() {
   clearTimeout(draftTimer);
-  draftTimer = setTimeout(() => {
-    const { firstFrame, lastFrame, images, videos, audios, anchors, ...plain } = form;
-    try { localStorage.setItem(DRAFT, JSON.stringify(plain)); } catch { /* ignore */ }
-  }, 400);
+  draftTimer = setTimeout(writeDraft, 400);
+}
+
+/** Open a project: its draft on the create tab (or `tab`). */
+function enterProject(id, tab = "create") {
+  if (!projectById(id)) return;
+  switchProject(id);
+  state.view = "project";
+  state.tab = tab;
+  state.scope = "project";
+  render();
+  root.scrollTop = 0;
+}
+
+function switchProject(id, keepOld = true) {
+  if (id === projects.current || !projectById(id)) return;
+  if (keepOld) {
+    writeDraft();
+    drafts.set(projects.current, Object.fromEntries(MEDIA_KEYS.map((k) => [k, form[k]])));
+  } else clearTimeout(draftTimer);
+  const preview = form.preview;
+  for (const k of Object.keys(form)) delete form[k];
+  updateProjects(() => { projects.current = id; });
+  Object.assign(form, FORM_DEFAULTS, loadDraft(id), drafts.get(id) || emptyMedia(), { preview });
+  if (state.aspects.length && !state.aspects.includes(form.aspect)) form.aspect = state.aspects[0];
+  drafts.delete(id);
+  state.missing = null;
+}
+
+/** Another tab changed the project list. If it deleted the project open here, go back to the picker. */
+function onProjectsChanged() {
+  const open = projects.current;
+  syncProjects();
+  if (!projectById(open)) {
+    for (const it of Object.values(drafts.get(open) || {}).flat()) dropItem(it);
+    for (const it of allMedia()) dropItem(it);
+    projects.list.length || projects.list.push({ ...Q.DEFAULT_PROJECT, createdAt: Date.now() });
+    projects.current = open; // switchProject needs a different id to act
+    switchProject(projects.list[0].id, false);
+    if (state.view === "project") { state.view = "projects"; toast("这个项目已在别的页面删除", "warn"); }
+    render();
+    return;
+  }
+  scheduleRender();
+}
+
+function projectDialog(title, value, onOk) {
+  const input = h("input", { class: "ks-input", id: "ks-project-name", value, maxlength: "40", placeholder: "例如：GTA 历史 / 影之刃零" });
+  const ok = () => {
+    const name = input.value.trim();
+    if (!name) { toast("先写项目名称", "err"); return; }
+    $(".ks-dialog-wrap", root)?.remove();
+    onOk(name);
+  };
+  input.addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); ok(); } });
+  dialog(title, field("项目名称", input, { for: "ks-project-name", hint: "每个项目有自己的草稿和生成记录；所有项目的任务在同一个 GPU 队列里按提交顺序生成。" }),
+    h("div", { class: "ks-dialog-foot" }, h("button", { class: "ks-btn", id: "ks-project-ok", onclick: ok }, "确定")));
+  setTimeout(() => { input.focus(); input.select(); }, 0);
+}
+
+function createProject() {
+  projectDialog("新建项目", "", (name) => {
+    const p = { id: `p${Date.now().toString(36)}${uid().slice(0, 4)}`, name, createdAt: Date.now() };
+    updateProjects(() => projects.list.push(p));
+    enterProject(p.id, "create");
+    toast(`已新建项目「${name}」`, "ok");
+  });
+}
+
+function renameProject(id) {
+  const p = projectById(id);
+  if (!p) return;
+  projectDialog("重命名项目", p.name, (name) => {
+    updateProjects(() => { const q = projectById(id); if (q) q.name = name; });
+    render();
+  });
+}
+
+async function deleteProject(id) {
+  const p = projectById(id);
+  if (!p || projects.list.length < 2) return;
+  const list = [...jobs.values()].filter((j) => jobProjectId(j) === id);
+  const active = list.filter((j) => ACTIVE.has(j.status)).length;
+  const what = list.length ? `和它的 ${list.length} 条记录（保存在本浏览器里的视频也会删除${active ? `，${active} 个排队或生成中的任务会被取消` : ""}）` : "";
+  if (!confirm(`删除项目「${p.name}」${what}？`)) return;
+  if (id === projects.current) { switchProject(projects.list.find((x) => x.id !== id).id); state.view = "projects"; }
+  for (const it of Object.values(drafts.get(id) || {}).flat()) dropItem(it);
+  drafts.delete(id);
+  try { localStorage.removeItem(draftKey(id)); } catch { /* ignore */ }
+  updateProjects(() => { projects.list = projects.list.filter((x) => x.id !== id); });
+  if (list.length) await deleteJobs(list); else render();
 }
 
 function mediaItem(file, kind, extra = {}) {
@@ -347,14 +501,14 @@ function probeImage(item) {
   });
 }
 
-function resolveMode() {
-  if (form.refMethod === "frames") {
-    if (form.firstFrame) return "i2v";
-    if (form.lastFrame) return { error: "首尾帧模式需要先放首帧（尾帧可以留空）" };
+function resolveMode(f = form) {
+  if (f.refMethod === "frames") {
+    if (f.firstFrame) return "i2v";
+    if (f.lastFrame) return { error: "首尾帧模式需要先放首帧（尾帧可以留空）" };
     return "t2v";
   }
-  if (form.anchors.length) return "keyframes";
-  if (form.images.length || form.videos.length || form.audios.length) return "r2v";
+  if (f.anchors.length) return "keyframes";
+  if (f.images.length || f.videos.length || f.audios.length) return "r2v";
   return "t2v";
 }
 
@@ -371,15 +525,18 @@ function nearestAspect(w, h) {
   return best;
 }
 
-function tags() {
-  return P.referenceTags({ images: form.images, videos: form.videos, audios: form.audios });
+function tags(f = form) {
+  return P.referenceTags({ images: f.images, videos: f.videos, audios: f.audios });
 }
 
 // ───────────────────────── jobs ─────────────────────────
 const jobs = new Map(); // id -> job
 const ACTIVE = new Set(["preparing", "queued", "running"]);
-const state = { tab: "create", filter: "all", search: "", running: null, queue: { running: [], pending: [] },
-  aspects: DEFAULT_ASPECTS.slice(), submitting: false, fetching: null, missing: null, lastFamily: null, lastUse: 0, pollFails: 0 };
+// gpuFamily: the DiT the last Studio job ran on (null = none known to be loaded, undefined = unknown: a graph job ran)
+// view: "projects" (the picker every visit starts on) or "project" (create + records of the current project)
+const state = { view: "projects", tab: "create", filter: "all", scope: "project", search: "", running: null, queue: { running: [], pending: [] },
+  plan: Q.planQueue([]), gpuFamily: null, aspects: DEFAULT_ASPECTS.slice(), submitting: false, fetching: null, missing: null,
+  lastUse: 0, pollFails: 0 };
 const urls = new Map(); // blob key -> object URL
 let metaPreview = false; // the frontend sends previews with prompt ids: ignore the bare duplicate
 
@@ -429,16 +586,30 @@ async function keepOutput(job) {
   } finally { job._storing = false; }
 }
 
+/** Learn timings from a run this page watched (events only reach the page that submitted it), with local clocks
+ * only: the server's history timestamps come from another machine's clock. */
 function learn(job) {
-  const m = job.meta;
-  if (!job.samplingMs || !m) return;
-  const key = `${FAMILY[m.mode]}|${m.res}|${m.speed}`;
-  const per = (job.samplingMs / 1000) / Math.max(1, m.duration);
-  const s = settings.stats[key] || { per: per, n: 0 };
-  s.per = s.n ? (s.per * Math.min(s.n, 4) + per) / (Math.min(s.n, 4) + 1) : per;
-  s.n += 1;
-  settings.stats[key] = s;
+  const L = job._live || {};
+  if (!job.meta || !L.successAt) return;
+  Q.learnRun(settings.stats, job.meta, { startedAt: L.startSeen ? job.startedAt : null, samplingStart: L.samplingStart ?? null,
+    samplingEnd: L.samplingEnd ?? null, endedAt: L.successAt, cold: L.cold ?? null });
   saveSettings();
+}
+
+/** A job has started on the GPU: note whether it had to load its models first (it follows another family, or
+ * nothing was loaded), for the estimates of the jobs behind it. */
+function markRunning(job, startSeen = false) {
+  job._live = job._live || {};
+  const was = `${job.status}|${job.startedAt}`;
+  if (startSeen) { job.startedAt = Date.now(); job._live.startSeen = true; job.startGuess = false; }
+  else if (!job.startedAt) { job.startedAt = Date.now(); job.startGuess = true; } // seen running, start unknown
+  job.status = "running";
+  if (`${job.status}|${job.startedAt}` !== was) saveJob(job);
+  if (!("cold" in job._live)) {
+    const fam = FAMILY[job.meta?.mode];
+    job._live.cold = state.gpuFamily === undefined ? null : state.gpuFamily !== fam;
+    state.gpuFamily = fam;
+  }
 }
 
 function finish(job, status, extra = {}, quiet = false) {
@@ -446,7 +617,6 @@ function finish(job, status, extra = {}, quiet = false) {
   Object.assign(job, { status, endedAt: job.endedAt || Date.now() }, extra);
   if (job._live?.preview) { URL.revokeObjectURL(job._live.preview); job._live.preview = null; }
   if (status === "done") {
-    state.lastFamily = FAMILY[job.meta?.mode] || state.lastFamily;
     if (job._live?.samplingStart && job._live?.samplingEnd) job.samplingMs = job._live.samplingEnd - job._live.samplingStart;
     learn(job);
     storeOutput(job);
@@ -486,17 +656,56 @@ async function finalizeFromHistory(job, entry, quiet = false) {
   }
 }
 
-async function poll() {
-  const active = [...jobs.values()].filter((j) => ACTIVE.has(j.status) && j.status !== "preparing");
-  if (!active.length) return;
-  keepAlive();
+/** Take a /queue payload: remember the order, pick up Studio jobs queued by other pages or browsers, and notice
+ * what started running. */
+async function takeQueue(q) {
+  state.queue = { running: q.queue_running || [], pending: (q.queue_pending || []).slice().sort((a, b) => a[0] - b[0]) };
+  for (const x of state.queue.running) await importQueued(x, "running");
+  for (const x of state.queue.pending) await importQueued(x, "queued");
+  for (const x of state.queue.running) {
+    const job = jobs.get(x[1]);
+    if (job && ACTIVE.has(job.status)) { markRunning(job); state.running = job.id; } else if (!x[3]?.kit_studio) state.gpuFamily = undefined;
+  }
+}
+
+async function importQueued(item, status) {
+  const id = item[1], meta = item[3]?.kit_studio;
+  if (!meta || jobs.has(id) || isDeleted(id)) return;
+  const saved = await db.getJob(id).catch(() => null); // the submitting tab's record has the reference files' keys
+  if (jobs.has(id)) return;
+  ensureProject(meta);
+  const job = saved ? { ...saved, _live: {} } : { id, number: item[0], status, meta, refs: meta.refs || [],
+    createdAt: meta.createdAt || Date.now(), classes: classMap(item[2]), _live: {} };
+  if (ACTIVE.has(job.status)) job.status = status;
+  jobs.set(id, job);
+  if (!saved) db.putJob(job);
+}
+
+/** The queue as the page sees it now: ComfyUI's order, minus jobs this page already saw finish, with estimates. */
+function livePlan() {
+  const entries = Q.queueEntries({ queue_running: state.queue.running, queue_pending: state.queue.pending })
+    .filter((e) => { const j = jobs.get(e.id); return !j || ACTIVE.has(j.status); });
+  const live = {};
+  for (const e of entries) {
+    const j = jobs.get(e.id);
+    if (j) live[e.id] = { ...(j._live || {}), startedAt: j.startedAt };
+  }
+  return Q.planQueue(entries, { stats: settings.stats, live, gpuFamily: state.gpuFamily, now: Date.now() });
+}
+
+let pollTimer = 0;
+/** ComfyUI broadcasts a "status" event to every page whenever its queue changes: refresh the queue shortly after. */
+function pollSoon(ms = 400) { clearTimeout(pollTimer); pollTimer = setTimeout(() => poll(true), ms); }
+
+async function poll(force = false) {
+  const active = () => [...jobs.values()].filter((j) => ACTIVE.has(j.status) && j.status !== "preparing");
+  const queued = state.queue.running.length + state.queue.pending.length;
+  if (!force && !active().length && !queued) return;
+  if (active().length) keepAlive();
   try {
-    const q = await json("/queue");
-    state.queue = { running: q.queue_running || [], pending: (q.queue_pending || []).slice().sort((a, b) => a[0] - b[0]) };
+    await takeQueue(await json("/queue"));
     const inQueue = new Set([...state.queue.running, ...state.queue.pending].map((x) => x[1]));
-    for (const job of active) {
-      const run = state.queue.running.some((x) => x[1] === job.id);
-      if (run && job.status === "queued") { job.status = "running"; job.startedAt = job.startedAt || Date.now(); state.running = job.id; saveJob(job); }
+    for (const job of active()) {
       if (inQueue.has(job.id)) { job._miss = 0; continue; }
       const h = await json(`/history/${encodeURIComponent(job.id)}`);
       if (h[job.id]) await finalizeFromHistory(job, h[job.id]);
@@ -513,25 +722,29 @@ async function poll() {
 async function syncHistory() {
   try {
     const [hist, q] = await Promise.all([json("/history?max_items=200"), json("/queue")]);
-    const queued = [...(q.queue_running || []).map((x) => [x, "running"]), ...(q.queue_pending || []).map((x) => [x, "queued"])];
-    for (const [item, st] of queued) {
-      const meta = item[3]?.kit_studio;
-      if (!meta || jobs.has(item[1])) continue;
-      jobs.set(item[1], { id: item[1], number: item[0], status: st, meta, refs: meta.refs || [], createdAt: meta.createdAt || Date.now(), classes: classMap(item[2]) });
-    }
+    // the models on the GPU are the ones the latest finished prompt used (unknown if that was not a Studio job)
+    const last = Object.values(hist).reduce((a, e) => (!a || (e.prompt?.[0] ?? -1) > (a.prompt?.[0] ?? -1) ? e : a), null);
+    if (!state.queue.running.length) state.gpuFamily = !last ? null : FAMILY[last.prompt?.[3]?.kit_studio?.mode];
+    await takeQueue(q);
+    const buried = [];
     for (const [id, entry] of Object.entries(hist)) {
       const meta = entry.prompt?.[3]?.kit_studio;
       if (!meta) continue;
+      if (isDeleted(id)) { buried.push(id); continue; }
       let job = jobs.get(id);
       const imported = !job;
       if (!job) {
-        job = { id, number: entry.prompt[0], status: "running", meta, refs: meta.refs || [], createdAt: meta.createdAt || Date.now(), classes: classMap(entry.prompt[2]) };
+        const saved = await db.getJob(id).catch(() => null);
+        ensureProject(meta);
+        job = saved ? { ...saved, _live: {} } : { id, number: entry.prompt[0], status: "running", meta, refs: meta.refs || [],
+          createdAt: meta.createdAt || Date.now(), classes: classMap(entry.prompt[2]) };
         jobs.set(id, job);
       }
       if (ACTIVE.has(job.status) || job.status === "lost") await finalizeFromHistory(job, entry, imported);
+      if (imported) db.putJob(job);
       if (job.status === "done" && !job.blobKey) storeOutput(job);
     }
-    for (const job of jobs.values()) db.putJob(job);
+    if (buried.length) fetch("/history", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ delete: buried }) }).catch(() => {});
   } catch (e) { console.warn("[studio] history sync", e); }
   scheduleRender();
 }
@@ -558,7 +771,9 @@ function onEvent(type, d) {
   if (type === "execution_start" && pid) {
     state.running = pid;
     const job = jobs.get(pid);
-    if (job && ACTIVE.has(job.status)) { job.status = "running"; job.startedAt = Date.now(); job._live = job._live || {}; saveJob(job); }
+    if (job && ACTIVE.has(job.status)) markRunning(job, true);
+    else if (!job) state.gpuFamily = undefined; // a graph job from this page
+    scheduleRender();
     return;
   }
   const job = jobs.get(pid || state.running);
@@ -568,12 +783,16 @@ function onEvent(type, d) {
     const node = typeof d === "string" ? d : d?.display_node || d?.node;
     if (node == null) return;
     job._live.phase = phaseFor(job.classes?.[node]);
-    if (job._live.samplingStart && !job._live.samplingEnd && !/Sampler/.test(job.classes?.[node] || "")) job._live.samplingEnd = Date.now();
+    if (job._live.stepFromAt && !job._live.samplingEnd && !/Sampler/.test(job.classes?.[node] || "")) job._live.samplingEnd = Date.now();
     scheduleRender();
   } else if (type === "progress") {
     const cls = job.classes?.[d.node] || "";
     if (/Sampler/.test(cls) || !cls) {
-      if (!job._live.samplingStart) job._live.samplingStart = Date.now() - 1;
+      // the step rate counts from the first step this page saw; a page that joined mid-run learns no timings
+      if (job._live.stepFromAt == null) {
+        job._live.stepFrom = d.value; job._live.stepFromAt = Date.now();
+        if (d.value <= 1) job._live.samplingStart = Date.now() - 1;
+      }
       job._live.step = d.value; job._live.steps = d.max;
       job._live.phase = "生成画面";
     }
@@ -582,7 +801,8 @@ function onEvent(type, d) {
     const out = firstMedia({ x: d.output });
     if (out) job.output = out;
   } else if (type === "execution_success") {
-    if (!job._live.samplingEnd && job._live.samplingStart) job._live.samplingEnd = Date.now();
+    if (!job._live.samplingEnd && job._live.stepFromAt) job._live.samplingEnd = Date.now();
+    job._live.successAt = Date.now();
     if (job.output) finish(job, "done");
     else json(`/history/${encodeURIComponent(job.id)}`).then((h) => h[job.id] && finalizeFromHistory(job, h[job.id])).catch(() => {});
   } else if (type === "execution_error") {
@@ -605,17 +825,17 @@ function onPreview(blob, meta) {
 }
 
 // ───────────────────────── generate ─────────────────────────
-function validate() {
+function validate(f = form) {
   const errs = [];
-  const mode = resolveMode();
+  const mode = resolveMode(f);
   if (mode.error) errs.push(mode.error);
-  if (!form.prompt.trim()) errs.push("先写一段画面描述");
-  const d = Number(form.duration);
+  if (!f.prompt.trim()) errs.push("先写一段画面描述");
+  const d = Number(f.duration);
   if (!(d >= 1 && d <= 20)) errs.push("时长要在 1–20 秒之间");
   if (typeof mode === "string" && !kit.byMode[mode]) errs.push(`当前 GPU 配置没有「${MODE_LABEL[mode]}」工作流`);
   if (mode === "keyframes") {
     const frames = P.framesFor(d);
-    for (const a of form.anchors) {
+    for (const a of f.anchors) {
       const t = Number(a.time);
       if (!(t >= 0)) { errs.push("每个固定画面都要填时间点"); break; }
       const at = P.pyRound(t * P.FPS);
@@ -632,12 +852,15 @@ function validate() {
 
 async function generate() {
   if (state.submitting) return;
-  const { mode, errs } = validate();
+  // the submission works on a snapshot: uploads take a while, and a project switch must not change what is sent
+  const f = { ...form, images: [...form.images], videos: [...form.videos], audios: [...form.audios], anchors: [...form.anchors] };
+  const proj = currentProject();
+  const { mode, errs } = validate(f);
   if (errs.length) { toast(errs[0], "err"); return; }
   state.submitting = true;
   state.missing = null;
   renderCreateFooter();
-  const seed = form.seed === "" || form.seed == null ? randomSeed() : Math.max(0, Math.floor(Number(form.seed)));
+  const seed = f.seed === "" || f.seed == null ? randomSeed() : Math.max(0, Math.floor(Number(f.seed)));
   try {
     setFooterStatus("正在准备工作流…");
     const tpl = await template(mode);
@@ -645,22 +868,22 @@ async function generate() {
     const up = async (it) => (it ? upload(it) : null);
     const isVid = (it) => it.kind === "video";
     const params = {
-      mode, prompt: form.prompt, duration: Number(form.duration), aspect: form.aspect,
-      megapixels: (RES.find((r) => r.key === form.res) || RES[0]).mp, seed, turbo: form.speed === "turbo",
-      refImageSize: form.refImageSize,
+      mode, prompt: f.prompt, duration: Number(f.duration), aspect: f.aspect,
+      megapixels: (RES.find((r) => r.key === f.res) || RES[0]).mp, seed, turbo: f.speed === "turbo",
+      refImageSize: f.refImageSize,
     };
-    if (mode === "i2v") { params.firstFrame = await up(form.firstFrame); params.lastFrame = await up(form.lastFrame); }
+    if (mode === "i2v") { params.firstFrame = await up(f.firstFrame); params.lastFrame = await up(f.lastFrame); }
     if (mode === "r2v" || mode === "keyframes") {
       params.images = [];
-      for (const it of form.images) params.images.push(await up(it));
+      for (const it of f.images) params.images.push(await up(it));
       params.videos = [];
-      for (const it of form.videos) params.videos.push({ name: await up(it), useAudio: !!it.useAudio });
+      for (const it of f.videos) params.videos.push({ name: await up(it), useAudio: !!it.useAudio });
       params.audios = [];
-      for (const it of form.audios) params.audios.push({ name: await up(it), isVideo: isVid(it) });
+      for (const it of f.audios) params.audios.push({ name: await up(it), isVideo: isVid(it) });
     }
     if (mode === "keyframes") {
       params.anchors = [];
-      for (const it of form.anchors) params.anchors.push({ kind: it.anchorKind, name: await up(it), isVideo: isVid(it), time: Number(it.time) });
+      for (const it of f.anchors) params.anchors.push({ kind: it.anchorKind, name: await up(it), isVideo: isVid(it), time: Number(it.time) });
     }
     const { prompt, warnings } = P.buildPrompt(tpl, params, { outputClasses: await outputClasses(tpl) });
     warnings.forEach((w) => console.warn("[studio]", w));
@@ -670,18 +893,18 @@ async function generate() {
       toast("这个模式需要的模型还没下载到 GPU 上", "err");
       return;
     }
-    const refs = await persistRefs(mode);
+    const refs = await persistRefs(mode, f);
     const meta = {
-      v: VERSION, mode, prompt: form.prompt, speed: form.speed, duration: Number(form.duration), res: form.res,
-      aspect: form.aspect, seed, refImageSize: form.refImageSize, createdAt: Date.now(),
-      refs: refs.map(({ blobKey, ...r }) => r),
+      v: VERSION, mode, prompt: f.prompt, speed: f.speed, duration: Number(f.duration), res: f.res,
+      aspect: f.aspect, seed, refImageSize: f.refImageSize, createdAt: Date.now(),
+      project: { id: proj.id, name: proj.name }, refs: refs.map(({ blobKey, ...r }) => r),
     };
     setFooterStatus("正在提交到 GPU…");
     const r = await fetch("/prompt", { method: "POST", headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ prompt, client_id: api.clientId, extra_data: { kit_studio: meta } }) });
     const body = await r.json().catch(() => ({}));
     if (!r.ok || !body.prompt_id) {
-      if (JSON.stringify(body).match(/Invalid (image|video|audio) file/)) for (const it of allMedia()) it.server = null;
+      if (JSON.stringify(body).match(/Invalid (image|video|audio) file/)) for (const it of allMedia(f)) it.server = null;
       throw new Error(promptError(body) || `提交失败（HTTP ${r.status}）`);
     }
     const job = { id: body.prompt_id, number: body.number, status: "queued", meta, refs, createdAt: meta.createdAt,
@@ -689,11 +912,16 @@ async function generate() {
     jobs.set(job.id, job);
     saveJob(job);
     keepAlive(true);
-    if (form.seed === "" || form.seed == null) form.lastSeed = seed;
-    state.tab = "records";
-    state.filter = "all";
+    if ((f.seed === "" || f.seed == null) && projects.current === proj.id) { form.lastSeed = seed; saveDraft(); }
+    await poll(true);
+    const ahead = livePlan().rows.find((x) => x.id === job.id)?.ahead || 0;
+    toast(ahead ? `已加入 GPU 队列：前面还有 ${ahead} 个任务` : "已提交，马上开始生成", "ok");
+    if (projects.current === proj.id) {
+      state.tab = "records";
+      state.filter = "all";
+      state.scope = "project";
+    }
     render();
-    setTimeout(poll, 1500);
   } catch (e) {
     console.error("[studio] generate", e);
     toast(e.message || String(e), "err", 9000);
@@ -714,8 +942,8 @@ function promptError(body) {
   return [head, ...parts].filter(Boolean).join("；").slice(0, 400);
 }
 
-function allMedia() {
-  return [form.firstFrame, form.lastFrame, ...form.images, ...form.videos, ...form.audios, ...form.anchors].filter(Boolean);
+function allMedia(f = form) {
+  return [f.firstFrame, f.lastFrame, ...f.images, ...f.videos, ...f.audios, ...f.anchors].filter(Boolean);
 }
 
 async function digest(blob) {
@@ -726,9 +954,9 @@ async function digest(blob) {
 }
 
 /** Keep the inputs of a run in IndexedDB, so "复用" works after the GPU (and its disk) is gone. */
-async function persistRefs(mode) {
+async function persistRefs(mode, f = form) {
   const out = [];
-  const t = tags();
+  const t = tags(f);
   const push = async (it, role, extra = {}) => {
     if (!it) return;
     let blobKey = null;
@@ -739,13 +967,13 @@ async function persistRefs(mode) {
     }
     out.push({ role, kind: it.kind, name: it.name, type: it.file.type, blobKey, ...extra });
   };
-  if (mode === "i2v") { await push(form.firstFrame, "first"); await push(form.lastFrame, "last"); }
+  if (mode === "i2v") { await push(f.firstFrame, "first"); await push(f.lastFrame, "last"); }
   if (mode === "r2v" || mode === "keyframes") {
-    for (const [i, it] of form.images.entries()) await push(it, "image", { tag: t.images[i] });
-    for (const [i, it] of form.videos.entries()) await push(it, "video", { tag: t.videos[i], audioTag: t.videoAudios[i], useAudio: !!it.useAudio });
-    for (const [i, it] of form.audios.entries()) await push(it, "audio", { tag: t.audios[i] });
+    for (const [i, it] of f.images.entries()) await push(it, "image", { tag: t.images[i] });
+    for (const [i, it] of f.videos.entries()) await push(it, "video", { tag: t.videos[i], audioTag: t.videoAudios[i], useAudio: !!it.useAudio });
+    for (const [i, it] of f.audios.entries()) await push(it, "audio", { tag: t.audios[i] });
   }
-  if (mode === "keyframes") for (const it of form.anchors) await push(it, "anchor", { anchorKind: it.anchorKind, time: Number(it.time) });
+  if (mode === "keyframes") for (const it of f.anchors) await push(it, "anchor", { anchorKind: it.anchorKind, time: Number(it.time) });
   return out;
 }
 
@@ -755,23 +983,55 @@ async function cancelJob(job) {
     if (job.status === "running") await fetch("/interrupt", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ prompt_id: job.id }) });
     else await fetch("/queue", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ delete: [job.id] }) });
     if (job.status !== "running") finish(job, "cancelled");
+    pollSoon();
   } catch (e) { toast(`取消失败：${e.message}`, "err"); }
+}
+
+/** Another tab deleted records: drop this tab's copies. */
+function dropBuried() {
+  const gone = new Set(tombs());
+  let n = 0;
+  for (const id of [...jobs.keys()]) {
+    if (!gone.has(id)) continue;
+    jobs.delete(id);
+    cards.get(id)?.remove();
+    cards.delete(id);
+    n++;
+  }
+  if (n) scheduleRender();
+}
+
+/** A deleted job that was still on the GPU writes its history entry only after the interrupt lands: delete that
+ * entry once the job has left the queue. */
+function purgeLater(ids, tries = 60) {
+  setTimeout(async () => {
+    try {
+      const q = await json("/queue");
+      const busy = [...(q.queue_running || []), ...(q.queue_pending || [])].some((x) => ids.includes(x[1]));
+      if (busy && tries > 1) { purgeLater(ids, tries - 1); return; }
+      await fetch("/history", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ delete: ids }) });
+    } catch { if (tries > 1) purgeLater(ids, tries - 1); }
+  }, 3000);
 }
 
 async function deleteJobs(list) {
   const doomed = new Set(list.map((j) => j.id));
+  const onGpu = list.filter((j) => ACTIVE.has(j.status)).map((j) => j.id);
   const keep = [...jobs.values()].filter((j) => !doomed.has(j.id));
   const stillUsed = new Set(keep.flatMap((j) => (j.refs || []).map((r) => r.blobKey)).filter(Boolean));
   for (const job of list) {
     if (ACTIVE.has(job.status)) await cancelJob(job);
     if (job.blobKey) { dropUrl(job.blobKey); await db.delBlob(job.blobKey).catch(() => {}); }
     for (const r of job.refs || []) if (r.blobKey && !stillUsed.has(r.blobKey)) { dropUrl(r.blobKey); await db.delBlob(r.blobKey).catch(() => {}); }
+    bury([job.id]);
     await db.delJob(job.id).catch(() => {});
     jobs.delete(job.id);
     cards.get(job.id)?.remove();
     cards.delete(job.id);
   }
   fetch("/history", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ delete: list.map((j) => j.id) }) }).catch(() => {});
+  if (onGpu.length) purgeLater(onGpu);
+  pollSoon();
   render();
 }
 
@@ -822,22 +1082,190 @@ async function reuse(job, seedOnly = false) {
 }
 
 // ───────────────────────── rendering ─────────────────────────
-let root, createPane, recordsPane, footer, renderQueued = false;
+let root, createPane, recordsPane, queuePane, footer, renderQueued = false;
 const cards = new Map();
 
 function scheduleRender() {
   if (renderQueued) return;
   renderQueued = true;
-  requestAnimationFrame(() => { renderQueued = false; renderTabs(); renderHeaderStatus(); if (state.tab === "records") renderRecords(); else renderCreateFooter(); });
+  requestAnimationFrame(() => {
+    renderQueued = false;
+    state.plan = livePlan();
+    renderProjects(); renderQueue(); renderTabs(); renderHeaderStatus();
+    if (state.view !== "project") return;
+    if (state.tab === "records") renderRecords(); else renderCreateFooter();
+  });
 }
 
 function render() {
   root.dataset.theme = settings.theme;
+  state.plan = livePlan();
+  renderProjects();
+  renderQueue();
   renderTabs();
   renderHeaderStatus();
-  createPane.hidden = state.tab !== "create";
-  recordsPane.hidden = state.tab !== "records";
+  const inProject = state.view === "project";
+  $("#ks-tabs", root).hidden = !inProject;
+  createPane.hidden = !inProject || state.tab !== "create";
+  recordsPane.hidden = !inProject || state.tab !== "records";
+  if (!inProject) return;
   if (state.tab === "create") renderCreate(); else renderRecords();
+}
+
+// ── projects: the picker every visit starts on, and the bar above an open project ──
+function projectStats(id) {
+  const list = [...jobs.values()].filter((j) => jobProjectId(j) === id);
+  const rows = state.plan.rows.filter((r) => r.project?.id === id);
+  return {
+    total: list.length, done: list.filter((j) => j.status === "done").length,
+    running: rows.filter((r) => r.running).length, queued: rows.filter((r) => !r.running).length,
+    next: rows.find((r) => !r.running) || null,
+    last: Math.max(projectById(id)?.createdAt || 0, ...list.map((j) => j.createdAt || 0)),
+  };
+}
+
+function activityText(st) {
+  const bits = [];
+  if (st.running) bits.push("生成中");
+  if (st.queued) bits.push(`排队 ${st.queued} 个${st.next?.startIn != null ? `，${fmtMin(st.next.startIn)}后轮到` : ""}`);
+  return bits.join(" · ");
+}
+
+function renderProjects() {
+  const el = $("#ks-projects", root);
+  if (!el) return;
+  if (state.view === "projects") {
+    const list = projects.list.map((p) => ({ p, st: projectStats(p.id) })).sort((a, b) => b.st.last - a.st.last);
+    const sig = JSON.stringify(["picker", list.map(({ p, st }) => [p.id, p.name, st.total, st.done, activityText(st), fmtTime(st.last)])]);
+    if (el.dataset.sig === sig) return;
+    el.dataset.sig = sig;
+    el.className = "ks-projects ks-card ks-picker";
+    clear(el).append(
+      h("div", { class: "ks-card-head" }, h("span", { class: "ks-bar" }), h("h2", null, "选择项目"),
+        h("span", { class: "ks-count" }, String(projects.list.length))),
+      h("div", { class: "ks-card-body" },
+        h("p", { class: "ks-hint ks-picker-hint" }, "一个视频一个项目，每个项目有自己的草稿和生成记录。GPU 一次只生成一个视频，不同项目提交的任务在 GPU 队列里按提交顺序生成。"),
+        h("div", { class: "ks-proj-grid" },
+          h("button", { class: "ks-proj-card ks-proj-new", id: "ks-project-new", onclick: createProject },
+            h("span", { class: "ks-plus" }, "+"), h("span", null, "新建项目")),
+          list.map(({ p, st }) => {
+            const act = activityText(st);
+            return h("div", { class: `ks-proj-card${act ? " ks-proj-busy" : ""}`, role: "button", tabindex: "0", "data-project": p.id,
+              "aria-label": `打开项目 ${p.name}`, onclick: () => enterProject(p.id),
+              onkeydown: (e) => { if (e.target === e.currentTarget && (e.key === "Enter" || e.key === " ")) { e.preventDefault(); enterProject(p.id); } } },
+              h("div", { class: "ks-proj-top" }, icon("folder", 18), h("span", { class: "ks-proj-name", title: p.name }, p.name)),
+              h("div", { class: "ks-proj-meta" }, st.total ? `${st.total} 条记录 · ${st.done} 个已完成` : "还没有生成过"),
+              h("div", { class: "ks-proj-meta ks-muted" }, `最近 ${fmtTime(st.last)}`),
+              act ? h("div", { class: "ks-proj-act" }, h("span", { class: "ks-spin" }), act) : null,
+              h("div", { class: "ks-proj-tools" },
+                h("button", { class: "ks-iconbtn", title: "重命名", "aria-label": `重命名项目 ${p.name}`, onclick: (e) => { e.stopPropagation(); renameProject(p.id); } }, icon("edit", 16)),
+                projects.list.length > 1 ? h("button", { class: "ks-iconbtn", title: "删除项目", "aria-label": `删除项目 ${p.name}`,
+                  onclick: (e) => { e.stopPropagation(); deleteProject(p.id); } }, icon("trash", 16)) : null));
+          }))));
+    return;
+  }
+  const p = currentProject();
+  const act = activityText(projectStats(p.id));
+  const sig = JSON.stringify(["bar", p.id, p.name, act, projects.list.length]);
+  if (el.dataset.sig === sig) return;
+  el.dataset.sig = sig;
+  el.className = "ks-projects ks-projbar";
+  clear(el).append(...[
+    h("button", { class: "ks-btn ks-small", id: "ks-project-back", title: "回到项目列表，换一个项目或新建项目",
+      onclick: () => { writeDraft(); state.view = "projects"; render(); } }, h("span", { class: "ks-flip" }, icon("chevron", 14)), "全部项目"),
+    h("span", { class: "ks-projbar-name", title: p.name }, icon("folder", 16), h("span", null, p.name)),
+    h("button", { class: "ks-iconbtn", title: "重命名项目", "aria-label": "重命名项目", onclick: () => renameProject(p.id) }, icon("edit", 16)),
+    projects.list.length > 1 ? h("button", { class: "ks-iconbtn", title: "删除项目", "aria-label": "删除项目", onclick: () => deleteProject(p.id) }, icon("trash", 16)) : null,
+    act ? h("span", { class: "ks-projbar-act" }, h("span", { class: "ks-spin" }), act) : null].filter(Boolean));
+}
+
+// ── the GPU queue: every project's jobs, in the order the GPU runs them ──
+let qHead = null, qNote = null, qList = null;
+const qRows = new Map(); // prompt id -> { el, sig, sub, bar }
+function renderQueue() {
+  if (!queuePane) return;
+  const plan = state.plan;
+  queuePane.hidden = !plan.rows.length;
+  if (!qList) {
+    qHead = h("div", { class: "ks-queue-head" }, icon("queue", 18), h("strong", null, "GPU 队列"),
+      h("span", { class: "ks-muted", title: "预计时间来自本浏览器完成过的同样设置（模式类别、清晰度、标准 / 闪电）的视频" }));
+    qNote = h("div", { class: "ks-queue-note", hidden: true });
+    qList = h("ol", { class: "ks-queue-list" });
+    queuePane.append(qHead, qNote, qList);
+  }
+  const now = Date.now();
+  const t = plan.total;
+  qHead.lastChild.textContent = [`${t.count} 个任务`,
+    t.endIn != null ? `全部完成约 ${fmtDur(t.endIn)}（${fmtClock(now + t.endIn * 1000)}）` : "总时长暂时无法估算"].join(" · ");
+  const fams = new Set(plan.rows.filter((r) => r.studio).map((r) => r.family));
+  const loads = [...fams].map((f) => settings.stats[`pre|${f}|cold`]?.per ?? Q.FALLBACK.preCold);
+  const note = t.switches >= 2 && fams.size > 1
+    ? `队列里「文生 / 首尾帧」和「参考」两类模式交替，要加载 ${t.switches} 次模型（每次约 ${fmtDur(Math.max(...loads))}）。同一类模式的任务挨着提交会更快。` : "";
+  qNote.hidden = !note;
+  if (qNote.textContent !== note) qNote.textContent = note;
+  const ids = new Set(plan.rows.map((r) => r.id));
+  for (const [id, x] of qRows) if (!ids.has(id)) { x.el.remove(); qRows.delete(id); }
+  plan.rows.forEach((r, i) => {
+    const el = queueRow(r, now);
+    if (qList.children[i] !== el) qList.insertBefore(el, qList.children[i] || null);
+  });
+}
+
+function queueRow(r, now) {
+  const job = jobs.get(r.id);
+  const L = job?._live || {};
+  const mine = r.clientId && r.clientId === api.clientId;
+  let status, pct = null;
+  if (isDeleted(r.id)) status = "已删除，正在中断…";
+  else if (r.running) {
+    const bits = [];
+    if (L.steps && !L.samplingEnd) { bits.push(`${L.phase || "生成画面"} ${L.step}/${L.steps}`); pct = Math.min(100, (L.step / L.steps) * 100); }
+    else { bits.push(L.phase || (r.studio ? "生成中" : "运行中")); if (L.samplingEnd) pct = 100; }
+    if (r.remaining != null) bits.push(`剩余约 ${fmtDur(r.remaining)}`);
+    if (job?.startedAt && !job.startGuess) bits.push(`已用 ${fmtDur((now - job.startedAt) / 1000)}`);
+    if (r.studio && !mine && !L.steps) bits.push("别的页面提交的，这里只能估算");
+    if (r.cold && !L.steps) bits.push("先加载模型");
+    status = bits.join(" · ");
+  } else {
+    const bits = [`前面还有 ${r.ahead} 个`];
+    if (r.startIn != null) bits.push(`约 ${fmtDur(r.startIn)}后开始（${fmtClock(now + r.startIn * 1000)}）`);
+    if (r.cold) bits.push("要先加载模型");
+    status = bits.join(" · ");
+  }
+  const m = r.meta || {};
+  const proj = r.project ? projectName(r.project.id, r.project.name) : "节点图";
+  const text = r.studio ? (m.prompt || "（无描述）").replace(/\s+/g, " ").slice(0, 80) : "不是工作室提交的任务";
+  const detail = r.studio ? [MODE_LABEL[m.mode], m.duration ? `${m.duration} 秒` : null, (RES.find((x) => x.key === m.res) || {}).label,
+    m.speed === "turbo" ? "闪电" : "标准"].filter(Boolean).join(" · ") : "";
+  const canCancel = !!(r.studio && job);
+  const sig = [r.running, r.position, proj, text, canCancel].join("|");
+  let x = qRows.get(r.id);
+  if (!x || x.sig !== sig) {
+    const open = () => {
+      if (!r.project || !projectById(r.project.id)) return;
+      enterProject(r.project.id, "records");
+      requestAnimationFrame(() => cards.get(r.id)?.scrollIntoView({ block: "center", behavior: "smooth" }));
+    };
+    const sub = h("span", { class: "ks-qsub" });
+    const fill = h("span", { class: "ks-progress-bar" });
+    const bar = r.running ? h("span", { class: "ks-progress ks-qbar" }, fill) : null;
+    const el = h("li", { class: `ks-qrow${r.running ? " ks-qrun" : ""}${r.studio ? "" : " ks-qother"}`, "data-qid": r.id },
+      h("span", { class: "ks-qpos", title: r.running ? "正在生成" : `第 ${r.position + 1} 个` }, r.running ? h("span", { class: "ks-spin" }) : `#${r.position + 1}`),
+      h("button", { class: "ks-qmain", onclick: open, disabled: !r.studio || null, title: r.studio ? "打开这个项目的生成记录" : "" },
+        h("span", { class: "ks-qtop" }, h("span", { class: "ks-qproj" }, proj), h("span", { class: "ks-qprompt" }, text)), sub, bar),
+      canCancel ? h("button", { class: "ks-act ks-act-danger", title: r.running ? "中断正在生成的视频" : "从队列里移除",
+        onclick: () => { const j = jobs.get(r.id); if (j && confirm(r.running ? "中断这个正在生成的视频？" : "把这个任务从队列里移除？")) cancelJob(j); } }, "取消") : null);
+    if (x) x.el.replaceWith(el);
+    x = { el, sig, sub, bar, fill };
+    qRows.set(r.id, x);
+  }
+  const subText = [detail, status].filter(Boolean).join(" · ");
+  if (x.sub.textContent !== subText) x.sub.textContent = subText;
+  if (x.bar) {
+    x.bar.classList.toggle("ks-indet", pct == null);
+    x.fill.style.width = pct == null ? "" : `${pct}%`;
+  }
+  return x.el;
 }
 
 function toast(msg, kind = "info", ms = 4500) {
@@ -866,6 +1294,8 @@ function buildShell() {
     h("div", { class: "ks-head" },
       h("h1", null, "视频生成"),
       h("button", { class: "ks-btn ks-ghost", onclick: () => setHidden(true), title: "打开 ComfyUI 节点图（高级）" }, icon("graph"), "打开节点图")),
+    h("nav", { class: "ks-projects", id: "ks-projects", "aria-label": "视频项目" }),
+    queuePane = h("section", { class: "ks-queue", id: "ks-queue", "aria-label": "GPU 队列", hidden: true }),
     h("div", { class: "ks-tabs", role: "tablist", id: "ks-tabs" }),
     createPane = h("section", { class: "ks-card", id: "ks-create", "aria-label": "视频创作参数" }),
     recordsPane = h("section", { class: "ks-card", id: "ks-records", "aria-label": "生成记录", hidden: true }));
@@ -916,7 +1346,7 @@ function setHidden(v) {
 function renderTabs() {
   const el = $("#ks-tabs", root);
   if (!el) return;
-  const active = [...jobs.values()].filter((j) => ACTIVE.has(j.status)).length;
+  const active = [...jobs.values()].filter((j) => ACTIVE.has(j.status) && jobProjectId(j) === projects.current).length;
   clear(el).append(
     h("button", { role: "tab", class: `ks-tab${state.tab === "create" ? " on" : ""}`, "aria-selected": String(state.tab === "create"),
       onclick: () => { state.tab = "create"; render(); } }, icon("spark"), "创作"),
@@ -1214,32 +1644,40 @@ function setFooterStatus(text) {
   if (el) el.textContent = text;
 }
 
-function estimate(mode) {
-  const key = `${FAMILY[mode]}|${form.res}|${form.speed}`;
-  const s = settings.stats[key];
-  const secs = s ? s.per * Math.max(1, Number(form.duration) || 5) : null;
-  return secs;
+/** Seconds the current draft would take on the GPU (null until a run with these settings finished here). */
+function estimate(mode, cold = false) {
+  return Q.estimateJob(settings.stats, { mode, res: form.res, speed: form.speed, duration: Math.max(1, Number(form.duration) || 5) }, cold);
 }
 
 function renderCreateFooter() {
-  if (!footer || state.tab !== "create") return;
-  clear(footer);
+  if (!footer || state.tab !== "create" || state.view !== "project") return;
+  let slot = $(".ks-missing-slot", footer), btn = $(".ks-primary", footer), note = $(".ks-foot-note", footer);
+  if (!btn) {
+    slot = h("div", { class: "ks-missing-slot" });
+    btn = h("button", { class: "ks-primary", onclick: generate }, h("span", { id: "ks-gen-label" }, "生成视频"));
+    note = h("div", { class: "ks-foot-note" });
+    clear(footer).append(slot, btn, note);
+  }
   const { mode, errs } = validate();
-  if (state.missing) footer.append(renderMissing());
-  const btn = h("button", { class: "ks-primary", disabled: state.submitting || !!state.fetching || null, onclick: generate },
-    h("span", { id: "ks-gen-label" }, state.submitting ? "正在提交…" : "生成视频"));
-  footer.append(btn);
+  const msig = state.missing ? JSON.stringify([state.missing, state.fetching ? Math.floor((Date.now() - state.fetching.since) / 1000) : null]) : "";
+  if (slot.dataset.sig !== msig) { slot.dataset.sig = msig; clear(slot); if (state.missing) slot.append(renderMissing()); }
+  btn.disabled = state.submitting || !!state.fetching;
+  const label = $("#ks-gen-label", btn);
+  if (!state.submitting) label.textContent = "生成视频";
+  else if (label.textContent === "生成视频") label.textContent = "正在提交…";
   const bits = [];
   if (typeof mode === "string") {
-    const secs = estimate(mode);
-    bits.push(secs ? `预计约 ${fmtDur(secs)}` : "首次生成后会显示预计时长");
-    if (state.lastFamily && state.lastFamily !== FAMILY[mode]) bits.push("切换模式后首次生成要重新加载模型，会多几分钟");
+    const at = Q.previewSubmit(state.plan, mode);
+    const secs = estimate(mode, !!at.cold);
+    if (at.ahead) bits.push(at.startIn != null ? `GPU 队列里前面有 ${at.ahead} 个任务，约 ${fmtDur(at.startIn)}后开始` : `GPU 队列里前面有 ${at.ahead} 个任务`);
+    bits.push(secs ? `生成约 ${fmtDur(secs)}` : "首次生成后会显示预计时长");
+    if (at.cold) bits.push("要先加载这个模式的模型，会多几分钟");
     const cu = gate.status?.cu?.per_hour;
     if (secs && cu) bits.push(`约 ${((secs / 3600) * cu).toFixed(2)} CU`);
   }
   if (mode === "t2v" && /<(Picture|Video|Audio) \d+>/.test(form.prompt)) bits.unshift("描述里用了 <Picture …> 这类标签，但还没有放参考素材");
   if (errs.length && form.prompt.trim()) bits.unshift(errs[0]);
-  footer.append(h("div", { class: "ks-foot-note" }, bits.join(" · ")));
+  note.textContent = bits.join(" · ");
 }
 
 function renderMissing() {
@@ -1331,8 +1769,8 @@ function renderRecords() {
       h("div", { class: "ks-card-head" }, h("span", { class: "ks-bar" }), h("h2", null, "生成记录"), h("span", { class: "ks-count", id: "ks-rec-count" }),
         h("span", { class: "ks-grow" }),
         h("button", { class: "ks-iconbtn ks-boxed", title: "刷新", "aria-label": "刷新视频记录", onclick: () => { syncHistory(); poll(); } }, icon("refresh", 18)),
-        h("button", { class: "ks-iconbtn ks-boxed", title: "清空已结束的记录", "aria-label": "清空已结束的视频", onclick: () => {
-          const done = [...jobs.values()].filter((j) => !ACTIVE.has(j.status));
+        h("button", { class: "ks-iconbtn ks-boxed", title: "清空已结束的记录（当前显示的项目范围）", "aria-label": "清空已结束的视频", onclick: () => {
+          const done = [...jobs.values()].filter((j) => !ACTIVE.has(j.status) && (state.scope === "all" || jobProjectId(j) === projects.current));
           if (!done.length) return;
           if (confirm(`删除 ${done.length} 条已结束的记录？保存在本浏览器里的视频也会一起删除。`)) deleteJobs(done);
         } }, icon("trash", 18))),
@@ -1344,9 +1782,14 @@ function renderRecords() {
       h("div", { class: "ks-empty-state", id: "ks-empty" }));
   }
   const filters = $("#ks-filters", recordsPane);
-  clear(filters).append(...[["all", "全部"], ["active", "进行中"], ["done", "已完成"], ["failed", "未完成"]].map(([k, l]) =>
-    h("button", { class: `ks-filter${state.filter === k ? " on" : ""}`, onclick: () => { state.filter = k; renderRecords(); } }, l)));
-  const list = [...jobs.values()].sort((a, b) => b.createdAt - a.createdAt);
+  clear(filters).append(
+    ...[["project", "本项目"], ["all", "全部项目"]].map(([k, l]) =>
+      h("button", { class: `ks-filter ks-scope${state.scope === k ? " on" : ""}`, "data-scope": k, onclick: () => { state.scope = k; renderRecords(); } }, l)),
+    h("span", { class: "ks-filter-sep", "aria-hidden": "true" }),
+    ...[["all", "全部"], ["active", "进行中"], ["done", "已完成"], ["failed", "未完成"]].map(([k, l]) =>
+      h("button", { class: `ks-filter${state.filter === k ? " on" : ""}`, onclick: () => { state.filter = k; renderRecords(); } }, l)));
+  const list = [...jobs.values()].filter((j) => state.scope === "all" || jobProjectId(j) === projects.current)
+    .sort((a, b) => b.createdAt - a.createdAt);
   $("#ks-rec-count", recordsPane).textContent = String(list.length);
   const q = state.search.trim().toLowerCase();
   const shown = list.filter((j) => {
@@ -1362,7 +1805,7 @@ function renderRecords() {
   want.forEach((c, i) => { if (host.children[i] !== c) host.insertBefore(c, host.children[i] || null); });
   const empty = $("#ks-empty", recordsPane);
   empty.hidden = shown.length > 0;
-  clear(empty).append(list.length ? "没有符合条件的记录" : h("div", null, h("div", { class: "ks-empty-title" }, "还没有生成过视频"),
+  clear(empty).append(list.length ? "没有符合条件的记录" : h("div", null, h("div", { class: "ks-empty-title" }, state.scope === "all" ? "还没有生成过视频" : "这个项目还没有生成过视频"),
     h("div", { class: "ks-hint" }, "生成的视频会自动保存在这个浏览器里，GPU 释放后也能回看和下载。")));
 }
 
@@ -1381,8 +1824,9 @@ function card(job) {
   const sig = `${job.status}|${job.blobKey || ""}|${job.expired ? 1 : 0}|${job.output?.filename || ""}`;
   if (el.dataset.sig !== sig) { el.dataset.sig = sig; paintMedia(el, job); }
   if (ACTIVE.has(job.status)) paintProgress(el, job);
-  const bsig = `${job.status}|${job.error || ""}|${job.blobKey ? 1 : 0}|${job.expired ? 1 : 0}|${job.endedAt || 0}|${job.meta?.prompt?.length || 0}`;
-  if (el.dataset.bsig !== bsig) { el.dataset.bsig = bsig; paintBody(el, job); }
+  const proj = state.scope === "all" ? projectName(jobProjectId(job), Q.projectOf(job.meta).name) : "";
+  const bsig = `${job.status}|${job.error || ""}|${job.blobKey ? 1 : 0}|${job.expired ? 1 : 0}|${job.endedAt || 0}|${job.meta?.prompt?.length || 0}|${proj}`;
+  if (el.dataset.bsig !== bsig) { el.dataset.bsig = bsig; paintBody(el, job, proj); }
   return el;
 }
 
@@ -1409,21 +1853,19 @@ function paintProgress(el, job) {
   if (!wrap) return;
   const L = job._live || {};
   let text = STATUS[job.status][0], pct = null, sub = "";
+  const row = state.plan.rows.find((r) => r.id === job.id);
   if (job.status === "queued") {
-    const pos = state.queue.pending.findIndex((x) => x[1] === job.id);
-    const ahead = (pos >= 0 ? pos : 0) + state.queue.running.length;
+    const ahead = row ? row.ahead : 0;
     text = ahead ? `排队中 · 前面还有 ${ahead} 个` : "排队中";
+    if (row?.startIn) sub = `约 ${fmtDur(row.startIn)}后开始`;
   } else if (job.status === "running") {
     text = L.phase || "开始生成";
-    if (L.steps) {
+    if (L.steps && !L.samplingEnd) {
       pct = Math.min(100, (L.step / L.steps) * 100);
       text = `${L.phase || "生成画面"} ${L.step}/${L.steps}`;
-      if (L.samplingStart && L.step >= 2) {
-        const per = (Date.now() - L.samplingStart) / L.step;
-        sub = `剩余约 ${fmtDur(((L.steps - L.step) * per * 1.12) / 1000)}`;
-      }
-    }
-    if (job.startedAt) sub = [sub, `已用 ${fmtDur((Date.now() - job.startedAt) / 1000)}`].filter(Boolean).join(" · ");
+    } else if (L.samplingEnd) pct = 100;
+    if (row?.remaining != null) sub = `剩余约 ${fmtDur(row.remaining)}`;
+    if (job.startedAt && !job.startGuess) sub = [sub, `已用 ${fmtDur((Date.now() - job.startedAt) / 1000)}`].filter(Boolean).join(" · ");
   }
   clear(wrap).append(...[
     h("div", { class: "ks-progress-text" }, h("span", { class: "ks-spin" }), text),
@@ -1431,7 +1873,7 @@ function paintProgress(el, job) {
     sub ? h("div", { class: "ks-progress-sub" }, sub) : null].filter(Boolean));
 }
 
-function paintBody(el, job) {
+function paintBody(el, job, proj) {
   const body = clear($(".ks-job-body", el));
   const m = job.meta || {};
   const [label, cls] = STATUS[job.status] || [job.status, "mute"];
@@ -1441,6 +1883,7 @@ function paintBody(el, job) {
     job.status === "failed" || job.status === "lost" ? h("p", { class: "ks-job-err", title: job.errorDetail || "" }, job.error || "") : null,
     h("div", { class: "ks-job-meta" },
       h("span", { class: `ks-badge ks-b-${cls}` }, label),
+      proj ? h("span", { class: "ks-badge ks-b-proj", title: "所属项目" }, proj) : null,
       h("span", null, [MODE_LABEL[m.mode], size ? `${size.width}×${size.height}` : null, m.duration ? `${m.duration} 秒` : null,
         m.speed === "turbo" ? "闪电" : "标准"].filter(Boolean).join(" · ")),
       job.endedAt && job.startedAt && job.status === "done" ? h("span", { class: "ks-muted" }, `用时 ${fmtDur((job.endedAt - job.startedAt) / 1000)}`) : null,
@@ -1467,6 +1910,7 @@ function dialog(title, ...content) {
 function showHelp() {
   dialog("使用说明",
     h("ol", { class: "ks-help" },
+      h("li", null, h("strong", null, "一个视频一个项目。"), "每次打开先选项目或新建项目，每个项目有自己的草稿和生成记录。GPU 一次只生成一个视频，不同项目提交的任务在「GPU 队列」里按提交顺序排队，面板上能看到排第几、大约什么时候开始。"),
       h("li", null, h("strong", null, "只写描述 = 文生视频。"), "在「参考素材」里放首帧就是图生视频，放参考图 / 视频 / 声音就是参考生成，加「固定画面」锚点会把画面钉在指定秒数。工作室会自动选对应的官方工作流。"),
       h("li", null, h("strong", null, "参考素材配结构化描述效果最好。"), "点「插入结构化模板」，把方括号里的内容改成你的；用 <Picture 1>、<Video 1>、<Audio 1> 指代素材（点素材角标即可插入）。台词写成 <d>[English] \"…\"</d>。"),
       h("li", null, h("strong", null, "第一次生成会慢。"), "开机后第一次、以及在「文生 / 首尾帧」和「参考」之间切换后，GPU 要先加载几十 GB 的模型。参考模式的模型是按需下载的，第一次用会提示你下载。"),
@@ -1540,7 +1984,11 @@ async function boot() {
   }
   api.addEventListener("b_preview_with_metadata", (e) => { const d = e.detail || {}; metaPreview = true; if (d.blob) onPreview(d.blob, d); });
   api.addEventListener("b_preview", (e) => { if (e.detail instanceof Blob && !metaPreview) onPreview(e.detail, null); });
-  api.addEventListener("status", () => scheduleRender());
+  api.addEventListener("status", () => { scheduleRender(); pollSoon(); });
+  window.addEventListener("storage", (e) => {
+    if (e.key === PROJECTS) onProjectsChanged();
+    else if (e.key === TOMBS) dropBuried();
+  });
   api.addEventListener("reconnected", () => { syncHistory(); poll(); });
 
   setInterval(poll, 10000);
@@ -1553,7 +2001,7 @@ async function boot() {
   });
   setInterval(() => { if ([...jobs.values()].some((j) => j.status === "running")) scheduleRender(); }, 1000);
   setInterval(refreshGate, 30000);
-  window.kitStudio = { jobs, form, state, settings, template, build: P.buildPrompt, version: VERSION };
+  window.kitStudio = { jobs, form, state, settings, projects, enterProject, createProject, template, build: P.buildPrompt, version: VERSION };
 }
 
 boot().catch((e) => console.error("[studio] boot", e));
